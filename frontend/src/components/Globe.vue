@@ -15,13 +15,21 @@ const IMAGERY_BRIGHTNESS = 0.82
 // key instead of a click — the mouse aims, the key drops the pin.
 const DROP_KEY = 'f'
 
-// Where every city starts from — a natural whole-globe framing. Each new round
-// flies back here, so no round opens with a hint about which hemisphere to
-// look in.
+// The opening view only: a neutral whole-globe framing to start a game from.
 const HOME_LON = 0
 const HOME_LAT = 20
 const HOME_HEIGHT = 22_000_000
-const HOME_FLIGHT_SECONDS = 1.4
+
+// Advancing to the next city lifts the camera where it stands rather than
+// flying it home. Going home sent every round back through the same point off
+// West Africa, which read as the globe snapping back rather than the game
+// moving on. Nothing leaks by staying put — the next city is drawn
+// independently of the last one, so the view you keep says nothing about it.
+//
+// A fixed height rather than a multiple of the current one, so every round
+// opens at the same scale no matter how wide the last reveal had to pull back.
+const NEXT_ROUND_HEIGHT = 14_000_000
+const NEXT_ROUND_FLIGHT_SECONDS = 1.4
 
 // The pin is a cylinder along the surface normal, so it reads as a spike
 // standing off the globe and stays legible as the planet rotates under it.
@@ -378,9 +386,43 @@ function clearRound() {
   pinDiameterLabel.value = DROP_HINT
   pinLengthLabel.value = ''
 
+  liftForNextRound()
+}
+
+// What the camera is aimed at, which after a reveal is not the same as what it
+// is standing over — the reveal tilts it, so the two are a good fraction of the
+// viewing distance apart. Undefined when the centre of the screen is off the
+// globe entirely, i.e. looking past the limb into space.
+function lookAtCartographic() {
+  const canvas = viewer.scene.canvas
+  const centre = new Cesium.Cartesian2(
+    canvas.clientWidth / 2,
+    canvas.clientHeight / 2,
+  )
+  const ray = viewer.camera.getPickRay(centre)
+  const ground = ray ? viewer.scene.globe.pick(ray, viewer.scene) : undefined
+  return Cesium.defined(ground)
+    ? Cesium.Cartographic.fromCartesian(ground)
+    : undefined
+}
+
+// Pull up and level out for the next city, holding the ground the reveal left
+// under the centre of the screen.
+function liftForNextRound() {
+  // Aiming at space is rare but possible; standing still beats snapping to an
+  // arbitrary point, so fall back to whatever the camera is above.
+  const site = lookAtCartographic() ?? viewer.camera.positionCartographic
   viewer.camera.flyTo({
-    destination: Cesium.Cartesian3.fromDegrees(HOME_LON, HOME_LAT, HOME_HEIGHT),
-    duration: HOME_FLIGHT_SECONDS,
+    destination: Cesium.Cartesian3.fromRadians(
+      site.longitude,
+      site.latitude,
+      NEXT_ROUND_HEIGHT,
+    ),
+    // The reveal leaves the camera tilted and this undoes it. flyTo would
+    // default to exactly this, but the reset is the point of the call, so it
+    // says so rather than relying on the default staying put.
+    orientation: {heading: 0, pitch: -Cesium.Math.PI_OVER_TWO, roll: 0},
+    duration: NEXT_ROUND_FLIGHT_SECONDS,
   })
 }
 
