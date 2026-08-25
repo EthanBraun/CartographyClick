@@ -1,5 +1,5 @@
 <script setup>
-import {onBeforeUnmount, onMounted, ref} from 'vue'
+import {onBeforeUnmount, onMounted, ref, watch} from 'vue'
 import * as Cesium from 'cesium'
 
 // ESRI's public World Imagery service: Google-Earth-style satellite basemap
@@ -14,6 +14,14 @@ const IMAGERY_BRIGHTNESS = 0.82
 // Dragging already means "rotate the globe", so the guess is committed with a
 // key instead of a click — the mouse aims, the key drops the pin.
 const DROP_KEY = 'f'
+
+// Where every city starts from — a natural whole-globe framing. Each new round
+// flies back here, so no round opens with a hint about which hemisphere to
+// look in.
+const HOME_LON = 0
+const HOME_LAT = 20
+const HOME_HEIGHT = 22_000_000
+const HOME_FLIGHT_SECONDS = 1.4
 
 // The pin is a cylinder along the surface normal, so it reads as a spike
 // standing off the globe and stays legible as the planet rotates under it.
@@ -30,10 +38,9 @@ const PIN_RADIUS_MILES = 2
 const PIN_RADIUS = PIN_RADIUS_MILES * METRES_PER_MILE
 const PIN_MIN_RADIUS_PX = 8
 // Holding a constant pixel size forever means the pin grows relative to the
-// globe as the globe shrinks away. Past this camera distance — the altitude
-// the app opens at, i.e. a natural whole-globe framing — the pin stops growing
-// and from there shrinks with everything else.
-const PIN_GROWTH_CEILING = 22_000_000
+// globe as the globe shrinks away. Past the home altitude the pin stops
+// growing and from there shrinks with everything else.
+const PIN_GROWTH_CEILING = HOME_HEIGHT
 const PIN_ASPECT = 6                 // length = 6 x radius
 // Let the imagery read through the pin rather than punching a solid hole in it.
 const PIN_OPACITY = 0.7
@@ -44,6 +51,34 @@ const HUE_PERFECT = 101
 const HUE_WORST = 0
 const RAMP_SATURATION = 0.78
 const RAMP_LIGHTNESS = 0.41
+
+// The answer pin has to read as "the city was here", never as a score, so it
+// sits off the accuracy ramp entirely — cyan is nowhere on a green-to-red run.
+const TARGET_COLOUR = Cesium.Color.fromHsl(189 / 360, 0.82, 0.52, PIN_OPACITY)
+
+// Geodesic tie-line from the guess to the answer, so a miss reads as a
+// direction rather than just a number.
+const LINK_WIDTH = 2
+const LINK_DASH = 14
+const LINK_COLOUR = Cesium.Color.WHITE.withAlpha(0.75)
+// Only used where the scene can't clamp a polyline to the ground: a line laid
+// exactly on the ellipsoid z-fights with it, and a few km of lift is invisible
+// at the range a reveal actually gets viewed from.
+const LINK_FALLBACK_HEIGHT = 4000
+
+// Revealing frames both pins. A bounding sphere around two near-identical
+// points has almost no radius, which would fly the camera into the ground, so
+// hold it open to something that still reads as a place.
+const REVEAL_MIN_RADIUS = 25_000
+const REVEAL_FLIGHT_SECONDS = 1.6
+// Cesium frames a bounding sphere at a 45-degree pitch by default, which swings
+// the globe over hard on every reveal. Sit much closer to straight down so the
+// result reads as a map you can measure by eye. Not fully overhead, though: the
+// pins are cylinders standing on the surface, and from directly above they
+// collapse into flat circles and stop reading as pins at all.
+const REVEAL_PITCH = Cesium.Math.toRadians(-72)
+// North-up. A reveal is for reading a miss, so the compass shouldn't move too.
+const REVEAL_HEADING = 0
 
 // Cesium moves the camera by (5 * maximumMovementRatio) of the remaining
 // altitude per wheel notch. Near the ground the "remaining" term shrinks and
@@ -61,15 +96,27 @@ const ZOOM_DAMP_FROM = 3_000_000      // metres; below this, no extra easing
 // block below — bake the resulting metre value in when that block goes.
 const MIN_ZOOM_SCALE_MILES = 5
 
+const props = defineProps({
+  // The city being asked for: {name, country, lat, lon}.
+  target: {type: Object, default: null},
+  // Flips once the guess is locked in and the answer is on the table.
+  revealed: {type: Boolean, default: false},
+  // Changes for every new city. Watched instead of `target` because two games
+  // back to back can draw the same city, and an identity check would miss it.
+  round: {type: Number, default: 0},
+  // 1 = dead on, 0 = as wrong as it gets; colours the guess pin.
+  accuracy: {type: Number, default: 1},
+})
+
 const emit = defineEmits(['guess'])
 
 const container = ref(null)
 let viewer = null
 let pin = null
-// Guess site in radians, and how close it landed. Until targets exist every
-// guess is scored perfect, so the pin sits at the green end of the ramp.
+let targetPin = null
+let link = null
+// Guess site, in radians.
 let guess = null
-let guessAccuracy = 1
 let cursorHandler = null
 let removeReadout = null
 let removeZoomStep = null
@@ -88,6 +135,8 @@ function onKeyDown(event) {
 
 function dropPin() {
   if (!viewer || viewer.isDestroyed() || !cursor) return
+  // One guess per city — once the answer is showing, the round is closed.
+  if (!props.target || props.revealed) return
 
   const ray = viewer.camera.getPickRay(cursor)
   if (!ray) return
@@ -99,7 +148,7 @@ function dropPin() {
 
   const carto = Cesium.Cartographic.fromCartesian(position)
   guess = {longitude: carto.longitude, latitude: carto.latitude}
-  if (!pin) pin = addPin(() => guess, () => accuracyColour(guessAccuracy))
+  if (!pin) pin = addPin(() => guess, () => accuracyColour(props.accuracy))
 
   emit('guess', {
     lat: Cesium.Math.toDegrees(carto.latitude),
@@ -146,7 +195,8 @@ const SCALE_TARGET_PX = 170
 
 const scaleBarPx = ref(0)
 const scaleLabel = ref('')
-const pinDiameterLabel = ref('drop a pin with F')
+const DROP_HINT = `drop a pin with ${DROP_KEY.toUpperCase()}`
+const pinDiameterLabel = ref(DROP_HINT)
 const pinLengthLabel = ref('')
 const altitudeLabel = ref('')
 const minZoomLabel = ref('')
@@ -263,6 +313,84 @@ function addPin(siteFn, colourFn) {
   })
 }
 
+// Put the answer on the globe: a pin on the real city, plus a geodesic back to
+// the guess. Guarded on targetPin so a re-render can't stack duplicates.
+function revealTarget() {
+  if (!viewer || viewer.isDestroyed() || !props.target || targetPin) return
+
+  const site = {
+    longitude: Cesium.Math.toRadians(props.target.lon),
+    latitude: Cesium.Math.toRadians(props.target.lat),
+  }
+  targetPin = addPin(() => site, () => TARGET_COLOUR)
+  if (!guess) return
+
+  const clamped = Cesium.GroundPolylinePrimitive.isSupported(viewer.scene)
+  const height = clamped ? 0 : LINK_FALLBACK_HEIGHT
+  link = viewer.entities.add({
+    polyline: {
+      positions: [
+        Cesium.Cartesian3.fromRadians(guess.longitude, guess.latitude, height),
+        Cesium.Cartesian3.fromRadians(site.longitude, site.latitude, height),
+      ],
+      // Straight through the earth is not a distance anyone reads; a geodesic
+      // is the line the score was actually measured along.
+      arcType: Cesium.ArcType.GEODESIC,
+      clampToGround: clamped,
+      width: LINK_WIDTH,
+      material: new Cesium.PolylineDashMaterialProperty({
+        color: LINK_COLOUR,
+        dashLength: LINK_DASH,
+      }),
+    },
+  })
+
+  const sphere = Cesium.BoundingSphere.fromPoints([
+    Cesium.Cartesian3.fromRadians(guess.longitude, guess.latitude),
+    Cesium.Cartesian3.fromRadians(site.longitude, site.latitude),
+  ])
+  sphere.radius = Math.max(sphere.radius, REVEAL_MIN_RADIUS)
+  viewer.camera.flyToBoundingSphere(sphere, {
+    duration: REVEAL_FLIGHT_SECONDS,
+    // Range 0 means "work out the distance from the sphere", which is the
+    // framing we already want; only the angle is being overridden here.
+    offset: new Cesium.HeadingPitchRange(REVEAL_HEADING, REVEAL_PITCH, 0),
+  })
+}
+
+// Clear the round's markers and pull back out to the whole globe, so the next
+// city starts from the same blank slate every time.
+function clearRound() {
+  if (!viewer || viewer.isDestroyed()) return
+
+  for (const entity of [pin, targetPin, link]) {
+    if (entity) viewer.entities.remove(entity)
+  }
+  pin = null
+  targetPin = null
+  link = null
+  guess = null
+  pinDiameterLabel.value = DROP_HINT
+  pinLengthLabel.value = ''
+
+  viewer.camera.flyTo({
+    destination: Cesium.Cartesian3.fromDegrees(HOME_LON, HOME_LAT, HOME_HEIGHT),
+    duration: HOME_FLIGHT_SECONDS,
+  })
+}
+
+watch(
+  () => props.revealed,
+  (revealed) => {
+    if (revealed) revealTarget()
+  },
+)
+
+// A new city wipes the board. Advancing bumps `round` and drops `revealed` in
+// the same tick, so this runs alongside the watcher above — which is why that
+// one only ever acts on the rising edge.
+watch(() => props.round, clearRound)
+
 onMounted(() => {
   const imagery = Cesium.ImageryLayer.fromProviderAsync(
     Cesium.ArcGisMapServerImageryProvider.fromUrl(IMAGERY_URL, {
@@ -304,7 +432,7 @@ onMounted(() => {
   controller.enableLook = false
 
   camera.setView({
-    destination: Cesium.Cartesian3.fromDegrees(0, 20, 22_000_000),
+    destination: Cesium.Cartesian3.fromDegrees(HOME_LON, HOME_LAT, HOME_HEIGHT),
   })
 
   // Cesium reuses the movement object between events, so keep our own copy.
@@ -331,6 +459,8 @@ onBeforeUnmount(() => {
   if (viewer && !viewer.isDestroyed()) viewer.destroy()
   viewer = null
   pin = null
+  targetPin = null
+  link = null
   guess = null
   cursor = null
 })
