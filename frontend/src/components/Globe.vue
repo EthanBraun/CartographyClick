@@ -66,10 +66,15 @@ const LINK_COLOUR = Cesium.Color.WHITE.withAlpha(0.75)
 // at the range a reveal actually gets viewed from.
 const LINK_FALLBACK_HEIGHT = 4000
 
-// Revealing frames both pins. A bounding sphere around two near-identical
-// points has almost no radius, which would fly the camera into the ground, so
-// hold it open to something that still reads as a place.
-const REVEAL_MIN_RADIUS = 25_000
+// Revealing frames both pins. Cesium puts the camera exactly far enough to fit
+// the bounding sphere, which crops to the two pins and nothing else — no
+// coastline, no country, nothing to read the miss against. Padding the radius
+// pulls the camera back by the same factor and buys that context.
+const REVEAL_PADDING = 2
+// A bounding sphere around two near-identical points has almost no radius, so
+// a good guess would otherwise dive to the zoom floor. This is what actually
+// governs how close a *close* guess gets, and padding barely touches it.
+const REVEAL_MIN_RADIUS = 90_000
 const REVEAL_FLIGHT_SECONDS = 1.6
 // Cesium frames a bounding sphere at a 45-degree pitch by default, which swings
 // the globe over hard on every reveal. Sit much closer to straight down so the
@@ -349,7 +354,7 @@ function revealTarget() {
     Cesium.Cartesian3.fromRadians(guess.longitude, guess.latitude),
     Cesium.Cartesian3.fromRadians(site.longitude, site.latitude),
   ])
-  sphere.radius = Math.max(sphere.radius, REVEAL_MIN_RADIUS)
+  sphere.radius = Math.max(sphere.radius * REVEAL_PADDING, REVEAL_MIN_RADIUS)
   viewer.camera.flyToBoundingSphere(sphere, {
     duration: REVEAL_FLIGHT_SECONDS,
     // Range 0 means "work out the distance from the sphere", which is the
