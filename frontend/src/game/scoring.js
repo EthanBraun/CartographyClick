@@ -1,29 +1,31 @@
-// Distance-to-points math, reverse-engineered from maptap.gg's own numbers as
-// logged in https://shishke.blog/2026/04/14/numbers-maptap-points-system/
+// Distance-to-points math, taken from maptap.gg's own calculateScore() in
+// https://maptap.gg/js/location-detection.js rather than inferred:
 //
-// The post pins down four boundaries by replaying the NYC tutorial:
+//   const maxDistance = 16250
+//   if (distance >= maxDistance) return distance < 16750 ? 0.01 : 0
+//   return Math.exp(-(distance / maxDistance) * 3.5)
 //
-//   23 km -> 100    24 km -> 99    69 km -> 99    72 km -> 98
+// This replaced a power falloff fitted to the four boundaries the scoring post
+// logged (23 km -> 100, 24 -> 99, 69 -> 99, 72 -> 98). That fit reproduced all
+// four exactly and was still wrong: two very different curves pass through the
+// same four points when they all sit inside the first 72 km. It drifted badly
+// further out -- at 8000 km it paid 11 where the real game pays 18.
 //
-// plus a floor: a guess out by the antipode scores 0. A single power falloff
-// reproduces every one of those, so nothing here is special-cased -- notably
-// there is no separate "close enough counts as perfect" radius. 100 is just
-// what the curve rounds to inside ~23 km, and the post's observation that the
-// curve is smooth across national borders falls out for free.
+// Note the falloff is pinned to 16,250 km, not to the antipode: everything
+// past 16,750 km scores a flat 0, so the furthest quarter of the planet is one
+// dead zone rather than a taper.
 
 // Mean Earth radius. The great-circle distance below treats the planet as a
 // sphere, which is off by up to ~0.3% against the real ellipsoid -- far inside
 // the ~1 km that would move a single point on the curve.
 const EARTH_RADIUS_KM = 6371.0088
 
-// The furthest two points on Earth can be: half the circumference. Scoring is
-// pinned to this rather than a round 20,000 km so that an antipodal guess
-// lands on exactly zero instead of going slightly negative.
-const ANTIPODE_KM = Math.PI * EARTH_RADIUS_KM
-
-// Solved from the boundaries above; the whole window that satisfies all four
-// is roughly 4.19 to 4.36.
-const FALLOFF = 4.25
+const FALLOFF_KM = 16_250
+const FALLOFF_RATE = 3.5
+// Between these two the real game pays a token 0.01 rather than dropping
+// straight to nothing.
+const ZERO_KM = 16_750
+const CONSOLATION = 0.01
 
 // Five cities, weighted 1-1-2-3-3, so a flawless game is exactly 1000.
 export const ROUND_MULTIPLIERS = [1, 1, 2, 3, 3]
@@ -44,7 +46,8 @@ export function greatCircleKm(a, b) {
 
 // 0-100 for one round, before its multiplier.
 export function roundPoints(distanceKm) {
-  const remaining = 1 - distanceKm / ANTIPODE_KM
-  if (remaining <= 0) return 0
-  return Math.round(ROUND_MAX * remaining ** FALLOFF)
+  if (distanceKm >= FALLOFF_KM) {
+    return Math.round(ROUND_MAX * (distanceKm < ZERO_KM ? CONSOLATION : 0))
+  }
+  return Math.round(ROUND_MAX * Math.exp(-(distanceKm / FALLOFF_KM) * FALLOFF_RATE))
 }

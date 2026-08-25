@@ -97,8 +97,6 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown))
         <div class="meta">
           round {{ index + 1 }} of {{ ROUNDS_PER_GAME }}
           <span class="multiplier">&times;{{ multiplier }}</span>
-          <!-- The pool is a quarter landmarks, so say when it isn't a city. -->
-          <span v-if="city.type" class="kind">{{ city.type }}</span>
         </div>
         <h1 class="city">{{ city.name }}</h1>
         <div class="country">{{ city.region }}</div>
@@ -198,13 +196,6 @@ kbd {
 .multiplier {
   margin-left: 6px;
   color: #e8c46a;
-}
-
-.kind {
-  margin-left: 8px;
-  padding-left: 8px;
-  border-left: 1px solid rgba(255, 255, 255, 0.22);
-  color: #8fb0c4;
 }
 
 .city {
