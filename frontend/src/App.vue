@@ -93,7 +93,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown))
     />
 
     <div class="hud">
-      <header class="prompt">
+      <header class="panel prompt">
         <div class="meta">
           round {{ index + 1 }} of {{ ROUNDS_PER_GAME }}
           <span class="multiplier">&times;{{ multiplier }}</span>
@@ -177,13 +177,16 @@ kbd {
 
 /* --- the ask ------------------------------------------------------------- */
 
+/* The ask rides over whatever imagery the round happens to land on, and a
+   text-shadow alone loses to snow, salt flats and cloud. It takes the same
+   panel as the footers instead -- the two are read in the same glance, so
+   backing only one of them would read as an accident. */
 .prompt {
   position: absolute;
   top: 16px;
   left: 50%;
   transform: translateX(-50%);
   text-align: center;
-  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.9);
 }
 
 .meta {
