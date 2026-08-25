@@ -1,0 +1,258 @@
+// Builds frontend/public/borders/{countries,regions}.json, the outlines the
+// reveal draws around the target's country and subdivision.
+//
+//   node tools/build-borders.js
+//
+// Source is Natural Earth 1:10m admin-0 and admin-1 (public domain), taken
+// from nvkelso/natural-earth-vector. 10m rather than 50m because 50m has no
+// feature at all for the small countries this game keeps asking for -- Monaco,
+// Macau, Tuvalu, Nauru, Grenada -- and ships subdivisions for only nine
+// countries, where 10m ships them for every one.
+//
+// Raw, that is 53 MB of GeoJSON. Three passes bring it to ~4 MB:
+//
+//   Every property but name / country code / subdivision type is dropped.
+//   Natural Earth carries about 130 fields per feature, nearly all of them
+//   language variants and rendering hints.
+//
+//   Coordinates are quantised to 1e-4 degrees (~11 m) and Douglas-Peucker'd at
+//   SIMPLIFY_DEG. That tolerance is set against how close the reveal camera
+//   ever gets: it frames a sphere of at least REVEAL_MIN_RADIUS, which works
+//   out around 200 m per screen pixel, so a 550 m deviation is under 3 px in
+//   the tightest reveal the game can produce and invisible in a normal one.
+//
+//   Rings are delta-encoded and packed into printable ASCII, the same scheme
+//   Google's encoded polylines use. Coordinates dominate the file, and a
+//   vertex costs about 4 characters this way against 18 as JSON numbers.
+//
+// The result loads as JSON and stays encoded until a round actually needs a
+// feature -- see frontend/src/game/borders.js, which holds the matching
+// decoder. Keep the two in step: PRECISION and the encoding are shared.
+
+const fs = require('fs')
+const path = require('path')
+
+const NE =
+  'https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson'
+const SOURCES = {
+  countries: 'ne_10m_admin_0_countries.geojson',
+  regions: 'ne_10m_admin_1_states_provinces.geojson',
+}
+
+const OUT_DIR = path.join(__dirname, '..', 'frontend', 'public', 'borders')
+const CACHE_DIR = path.join(__dirname, '.cache')
+
+// 1e-4 degrees, ~11 m at the equator. Well under the source's own accuracy, so
+// quantising costs nothing and shortens every delta.
+const PRECISION = 1e4
+// Douglas-Peucker tolerance, in degrees. ~550 m.
+const SIMPLIFY_DEG = 0.005
+// Rings smaller than this across are left alone: a 2 km islet has no detail to
+// spare, and for Tuvalu or Nauru that islet *is* the border being drawn.
+const SMALL_RING_DEG = 0.05
+
+// ---------------------------------------------------------------------------
+
+async function fetchSource(file) {
+  const cached = path.join(CACHE_DIR, file)
+  if (fs.existsSync(cached)) return JSON.parse(fs.readFileSync(cached, 'utf8'))
+
+  process.stderr.write(`fetching ${file}\n`)
+  const res = await fetch(`${NE}/${file}`)
+  if (!res.ok) throw new Error(`${file}: HTTP ${res.status}`)
+  const text = await res.text()
+  fs.mkdirSync(CACHE_DIR, {recursive: true})
+  fs.writeFileSync(cached, text)
+  return JSON.parse(text)
+}
+
+// Standard Douglas-Peucker, distance measured in raw degrees. Longitude
+// degrees shrink towards the poles, so this simplifies high-latitude coasts a
+// little harder than equatorial ones -- which is the right way round, since
+// those are also the ones drawn at the most exaggerated size.
+function simplify(points, tolerance) {
+  if (points.length < 3) return points
+  const keep = new Uint8Array(points.length)
+  keep[0] = 1
+  keep[points.length - 1] = 1
+
+  const stack = [[0, points.length - 1]]
+  while (stack.length) {
+    const [from, to] = stack.pop()
+    if (to - from < 2) continue
+
+    const ax = points[from][0]
+    const ay = points[from][1]
+    const dx = points[to][0] - ax
+    const dy = points[to][1] - ay
+    const span = dx * dx + dy * dy
+
+    let worst = -1
+    let at = -1
+    for (let i = from + 1; i < to; i++) {
+      const px = points[i][0]
+      const py = points[i][1]
+      let distance
+      if (span === 0) {
+        distance = Math.hypot(px - ax, py - ay)
+      } else {
+        let t = ((px - ax) * dx + (py - ay) * dy) / span
+        t = t < 0 ? 0 : t > 1 ? 1 : t
+        distance = Math.hypot(px - (ax + t * dx), py - (ay + t * dy))
+      }
+      if (distance > worst) {
+        worst = distance
+        at = i
+      }
+    }
+
+    if (worst > tolerance) {
+      keep[at] = 1
+      stack.push([from, at], [at, to])
+    }
+  }
+
+  return points.filter((_, i) => keep[i])
+}
+
+// Quantise, drop points the grid has collapsed onto their neighbour, then
+// simplify. Collapsing first matters: Cesium rejects a polyline with repeated
+// consecutive positions, and rounding is what creates them.
+function prepareRing(ring) {
+  const grid = []
+  for (const [lon, lat] of ring) {
+    const x = Math.round(lon * PRECISION) / PRECISION
+    const y = Math.round(lat * PRECISION) / PRECISION
+    const last = grid[grid.length - 1]
+    if (last && last[0] === x && last[1] === y) continue
+    grid.push([x, y])
+  }
+  if (grid.length < 4) return null
+
+  let minX = 180
+  let minY = 90
+  let maxX = -180
+  let maxY = -90
+  for (const [x, y] of grid) {
+    if (x < minX) minX = x
+    if (x > maxX) maxX = x
+    if (y < minY) minY = y
+    if (y > maxY) maxY = y
+  }
+
+  const small = Math.max(maxX - minX, maxY - minY) < SMALL_RING_DEG
+  const thinned = small ? grid : simplify(grid, SIMPLIFY_DEG)
+  return thinned.length >= 4 ? thinned : grid
+}
+
+// Zig-zag the delta so negatives stay short, then emit it five bits at a time,
+// low bits first, with 0x20 flagging "another chunk follows" and +63 lifting
+// every byte into printable ASCII that JSON never has to escape.
+function encodeValue(delta) {
+  let n = delta < 0 ? ~(delta << 1) : delta << 1
+  let out = ''
+  while (n >= 0x20) {
+    out += String.fromCharCode((0x20 | (n & 0x1f)) + 63)
+    n >>= 5
+  }
+  return out + String.fromCharCode(n + 63)
+}
+
+function encodeRing(ring) {
+  let out = ''
+  let x = 0
+  let y = 0
+  for (const point of ring) {
+    const nx = Math.round(point[0] * PRECISION)
+    const ny = Math.round(point[1] * PRECISION)
+    out += encodeValue(nx - x) + encodeValue(ny - y)
+    x = nx
+    y = ny
+  }
+  return out
+}
+
+// A feature becomes {b: bounding box, p: [polygon, ...]}, where a polygon is
+// [outer ring, hole, ...] and a ring is one encoded string. The box is what
+// lookup filters on, so nothing has to be decoded until a round wants it.
+function encodeFeature(geometry) {
+  if (!geometry) return null
+  const polygons =
+    geometry.type === 'Polygon' ? [geometry.coordinates] : geometry.coordinates
+
+  const out = []
+  let minX = 180
+  let minY = 90
+  let maxX = -180
+  let maxY = -90
+
+  for (const polygon of polygons) {
+    const rings = []
+    for (const ring of polygon) {
+      const prepared = prepareRing(ring)
+      if (!prepared) continue
+      rings.push(encodeRing(prepared))
+      for (const [x, y] of prepared) {
+        if (x < minX) minX = x
+        if (x > maxX) maxX = x
+        if (y < minY) minY = y
+        if (y > maxY) maxY = y
+      }
+    }
+    if (rings.length) out.push(rings)
+  }
+
+  if (!out.length) return null
+  return {b: [minX, minY, maxX, maxY], p: out}
+}
+
+// Natural Earth is inconsistent about field case between layers, so read each
+// name through its list of spellings.
+function firstOf(properties, ...keys) {
+  for (const key of keys) {
+    const value = properties[key]
+    if (value != null && value !== '') return value
+  }
+  return null
+}
+
+async function build(file, describe) {
+  const source = await fetchSource(file)
+  const features = []
+  for (const feature of source.features) {
+    const geometry = encodeFeature(feature.geometry)
+    if (!geometry) continue
+    features.push({...describe(feature.properties), ...geometry})
+  }
+  return features
+}
+
+async function main() {
+  const countries = await build(SOURCES.countries, (p) => ({
+    n: firstOf(p, 'NAME_EN', 'NAME', 'name'),
+    // ISO 3166-1 alpha-3, which is how a subdivision names its country.
+    a: firstOf(p, 'ADM0_A3', 'adm0_a3'),
+  }))
+  const regions = await build(SOURCES.regions, (p) => ({
+    n: firstOf(p, 'name_en', 'name'),
+    a: firstOf(p, 'adm0_a3'),
+    // "State", "Province", "Oblast" -- shown next to the subdivision's name.
+    t: firstOf(p, 'type_en', 'type'),
+  }))
+
+  fs.mkdirSync(OUT_DIR, {recursive: true})
+  for (const [name, features] of [
+    ['countries', countries],
+    ['regions', regions],
+  ]) {
+    const target = path.join(OUT_DIR, `${name}.json`)
+    fs.writeFileSync(target, JSON.stringify(features))
+    const mb = (fs.statSync(target).size / 1e6).toFixed(2)
+    process.stderr.write(`${name}.json  ${features.length} features  ${mb} MB\n`)
+  }
+}
+
+main().catch((error) => {
+  process.stderr.write(`${error.stack}\n`)
+  process.exit(1)
+})

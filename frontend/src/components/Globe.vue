@@ -1,6 +1,7 @@
 <script setup>
 import {onBeforeUnmount, onMounted, ref, watch} from 'vue'
 import * as Cesium from 'cesium'
+import {loadBorders, outlineFor} from '../game/borders'
 
 // ESRI's public World Imagery service: Google-Earth-style satellite basemap
 // with a full tile pyramid, so zooming pulls in progressively finer LoD.
@@ -74,6 +75,17 @@ const LINK_COLOUR = Cesium.Color.WHITE.withAlpha(0.75)
 // at the range a reveal actually gets viewed from.
 const LINK_FALLBACK_HEIGHT = 4000
 
+// Revealing also outlines where the answer was: the country in blue, and --
+// where the card names one, so the line has something to match -- the state,
+// province or prefecture inside it in yellow. Both are off the accuracy ramp
+// and off the answer pin's cyan, so an outline never reads as a score.
+const COUNTRY_BORDER_COLOUR = Cesium.Color.fromHsl(217 / 360, 0.9, 0.58, 0.95)
+const REGION_BORDER_COLOUR = Cesium.Color.fromHsl(48 / 360, 0.95, 0.55, 0.95)
+// The subdivision sits inside the country and shares its coast, so it goes on
+// thinner and on top: where the two lines coincide, the more specific one wins.
+const COUNTRY_BORDER_WIDTH = 3
+const REGION_BORDER_WIDTH = 2
+
 // Revealing frames both pins. Cesium puts the camera exactly far enough to fit
 // the bounding sphere, which crops to the two pins and nothing else — no
 // coastline, no country, nothing to read the miss against. Padding the radius
@@ -128,6 +140,8 @@ let viewer = null
 let pin = null
 let targetPin = null
 let link = null
+let countryOutline = null
+let regionOutline = null
 // Guess site, in radians.
 let guess = null
 let cursorHandler = null
@@ -371,6 +385,87 @@ function revealTarget() {
   })
 }
 
+// Outline the country the answer is in, and the subdivision within it. The
+// data is fetched once and the lookup costs a millisecond or two, so this can
+// land a frame or two behind the pins — hence the round check on the far side
+// of the await, which stops a slow load from dropping last city's border onto
+// the next one.
+async function revealBorders() {
+  const drawnFor = props.round
+  try {
+    await loadBorders()
+  } catch {
+    // No network, no outlines. The reveal still reads without them.
+    return
+  }
+  if (!viewer || viewer.isDestroyed()) return
+  if (props.round !== drawnFor || !props.revealed || !props.target) return
+  if (countryOutline) return
+
+  const outline = outlineFor(props.target)
+  if (!outline) return
+
+  countryOutline = addOutline(
+    outline.country.rings,
+    COUNTRY_BORDER_COLOUR,
+    COUNTRY_BORDER_WIDTH,
+  )
+  if (outline.region) {
+    regionOutline = addOutline(
+      outline.region.rings,
+      REGION_BORDER_COLOUR,
+      REGION_BORDER_WIDTH,
+    )
+  }
+}
+
+// `rings` are flat [lon, lat, ...] arrays. They all go into one primitive
+// rather than one each: Canada's outline is 412 rings, and batching keeps that
+// a single draw call instead of 412 entities the scene has to walk every frame.
+function addOutline(rings, colour, width) {
+  const clamped = Cesium.GroundPolylinePrimitive.isSupported(viewer.scene)
+  const appearance = new Cesium.PolylineMaterialAppearance({
+    material: Cesium.Material.fromType('Color', {color: colour}),
+  })
+
+  const geometryInstances = rings.map(
+    (ring) =>
+      new Cesium.GeometryInstance({
+        geometry: clamped
+          ? new Cesium.GroundPolylineGeometry({
+              positions: Cesium.Cartesian3.fromDegreesArray(ring),
+              width,
+              // A border is drawn as straight lines in lat/lon, and
+              // simplification leaves the long straight ones as a single
+              // segment — the US/Canada border along the 49th parallel is two
+              // points. Drawn as a geodesic that segment bows some 30 km north
+              // of the parallel it is supposed to be.
+              arcType: Cesium.ArcType.RHUMB,
+            })
+          : new Cesium.PolylineGeometry({
+              positions: Cesium.Cartesian3.fromDegreesArrayHeights(
+                lift(ring, LINK_FALLBACK_HEIGHT),
+              ),
+              width,
+              arcType: Cesium.ArcType.RHUMB,
+              vertexFormat: Cesium.PolylineMaterialAppearance.VERTEX_FORMAT,
+            }),
+      }),
+  )
+
+  const Outline = clamped ? Cesium.GroundPolylinePrimitive : Cesium.Primitive
+  return viewer.scene.primitives.add(
+    new Outline({geometryInstances, appearance}),
+  )
+}
+
+// Flat [lon, lat, ...] to flat [lon, lat, height, ...].
+function lift(ring, height) {
+  const out = []
+  for (let i = 0; i < ring.length; i += 2) out.push(ring[i], ring[i + 1], height)
+  return out
+}
+
 // Clear the round's markers and pull back out to the whole globe, so the next
 // city starts from the same blank slate every time.
 function clearRound() {
@@ -382,11 +477,22 @@ function clearRound() {
   pin = null
   targetPin = null
   link = null
+  clearOutlines()
   guess = null
   pinDiameterLabel.value = DROP_HINT
   pinLengthLabel.value = ''
 
   liftForNextRound()
+}
+
+// Primitives live on the scene rather than in the entity collection, so they
+// need removing by hand. `remove` destroys them, which is what we want.
+function clearOutlines() {
+  for (const outline of [countryOutline, regionOutline]) {
+    if (outline) viewer.scene.primitives.remove(outline)
+  }
+  countryOutline = null
+  regionOutline = null
 }
 
 // What the camera is aimed at, which after a reveal is not the same as what it
@@ -429,7 +535,9 @@ function liftForNextRound() {
 watch(
   () => props.revealed,
   (revealed) => {
-    if (revealed) revealTarget()
+    if (!revealed) return
+    revealTarget()
+    revealBorders()
   },
 )
 
@@ -492,6 +600,11 @@ onMounted(() => {
   window.addEventListener('resize', applyMinimumZoom)
   removeZoomStep = scene.postRender.addEventListener(updateZoomStep)
   removeReadout = scene.postRender.addEventListener(updateReadout)
+
+  // Start the border files downloading now rather than at the first reveal —
+  // there is a whole round of aiming to cover the few MB. A failure here is
+  // ignored on purpose; revealBorders() retries and copes with going without.
+  loadBorders().catch(() => {})
 })
 
 onBeforeUnmount(() => {
@@ -508,6 +621,8 @@ onBeforeUnmount(() => {
   pin = null
   targetPin = null
   link = null
+  countryOutline = null
+  regionOutline = null
   guess = null
   cursor = null
 })
