@@ -86,6 +86,13 @@ const REGION_BORDER_COLOUR = Cesium.Color.fromHsl(48 / 360, 0.95, 0.55, 0.95)
 const COUNTRY_BORDER_WIDTH = 3
 const REGION_BORDER_WIDTH = 2
 
+// An outline arrives a few rings at a time (see addOutline). The first chunk is
+// a single ring because that one ring is most of what there is to recognise,
+// and later chunks grow by this factor so the number of batches stays
+// logarithmic in the ring count -- six for Canada's 412, not 412.
+const OUTLINE_FIRST_CHUNK = 1
+const OUTLINE_CHUNK_GROWTH = 4
+
 // Revealing frames both pins. Cesium puts the camera exactly far enough to fit
 // the bounding sphere, which crops to the two pins and nothing else — no
 // coastline, no country, nothing to read the miss against. Padding the radius
@@ -419,11 +426,57 @@ async function revealBorders() {
   }
 }
 
-// `rings` are flat [lon, lat, ...] arrays. They all go into one primitive
+// `rings` are flat [lon, lat, ...] arrays. They go into a handful of primitives
 // rather than one each: Canada's outline is 412 rings, and batching keeps that
-// a single draw call instead of 412 entities the scene has to walk every frame.
+// a few draw calls instead of 412 the scene has to walk every frame.
+//
+// A handful rather than one, though. A primitive draws nothing until every
+// instance in it is ready, so a single batch of 412 makes the whole outline
+// wait on the last islet -- which is the pause the reveal used to open with.
+// Biggest ring first, the shape lands in the first chunk (that ring alone is
+// 61% of Russia's line and a third of the USA's) and the islands fill in
+// behind it.
+//
+// Each chunk waits on the one before being ready rather than on a timer, so
+// the fill paces itself to the machine: quick enough and it reads as an
+// instant draw, slow enough and it reads as a deliberate sweep. Either beats a
+// stall. It does mean the last islet lands later than one batch would have
+// managed -- that is the trade, and it buys the first ring landing far sooner.
 function addOutline(rings, colour, width) {
   const clamped = Cesium.GroundPolylinePrimitive.isSupported(viewer.scene)
+  // Vertex count stands in for how much of the outline a ring accounts for.
+  const ordered = [...rings].sort((a, b) => b.length - a.length)
+  const outline = {primitives: [], stop: null}
+
+  let drawn = 0
+  let size = OUTLINE_FIRST_CHUNK
+
+  const drawChunk = () => {
+    const chunk = ordered.slice(drawn, drawn + size)
+    drawn += chunk.length
+    size *= OUTLINE_CHUNK_GROWTH
+
+    const primitive = viewer.scene.primitives.add(
+      buildOutline(chunk, colour, width, clamped),
+    )
+    outline.primitives.push(primitive)
+    if (drawn >= ordered.length) return
+
+    // Polled rather than awaited: readyPromise is gone in this Cesium, and
+    // postRender is already where the rest of this component watches the scene.
+    outline.stop = viewer.scene.postRender.addEventListener(() => {
+      if (!primitive.ready) return
+      stopFilling(outline)
+      drawChunk()
+    })
+  }
+
+  drawChunk()
+  return outline
+}
+
+// One chunk of rings, as a primitive that has not been added to the scene yet.
+function buildOutline(rings, colour, width, clamped) {
   const appearance = new Cesium.PolylineMaterialAppearance({
     material: Cesium.Material.fromType('Color', {color: colour}),
   })
@@ -454,9 +507,16 @@ function addOutline(rings, colour, width) {
   )
 
   const Outline = clamped ? Cesium.GroundPolylinePrimitive : Cesium.Primitive
-  return viewer.scene.primitives.add(
-    new Outline({geometryInstances, appearance}),
-  )
+  return new Outline({geometryInstances, appearance})
+}
+
+// Chunk scheduling hangs off a postRender listener, so dropping an outline has
+// to take the listener with it -- otherwise the next chunk lands on the next
+// round's globe.
+function stopFilling(outline) {
+  if (!outline || !outline.stop) return
+  outline.stop()
+  outline.stop = null
 }
 
 // Flat [lon, lat, ...] to flat [lon, lat, height, ...].
@@ -489,7 +549,11 @@ function clearRound() {
 // need removing by hand. `remove` destroys them, which is what we want.
 function clearOutlines() {
   for (const outline of [countryOutline, regionOutline]) {
-    if (outline) viewer.scene.primitives.remove(outline)
+    if (!outline) continue
+    stopFilling(outline)
+    for (const primitive of outline.primitives) {
+      viewer.scene.primitives.remove(primitive)
+    }
   }
   countryOutline = null
   regionOutline = null
@@ -616,6 +680,10 @@ onBeforeUnmount(() => {
   removeZoomStep = null
   if (cursorHandler && !cursorHandler.isDestroyed()) cursorHandler.destroy()
   cursorHandler = null
+  // Before the viewer goes, while its postRender event is still there to
+  // detach from.
+  stopFilling(countryOutline)
+  stopFilling(regionOutline)
   if (viewer && !viewer.isDestroyed()) viewer.destroy()
   viewer = null
   pin = null
