@@ -138,6 +138,10 @@ const props = defineProps({
   round: {type: Number, default: 0},
   // 1 = dead on, 0 = as wrong as it gets; colours the guess pin.
   accuracy: {type: Number, default: 1},
+  // Bumped only when a new game starts. `round` moves for every city, so on
+  // its own it cannot tell "next city" from "start over" -- and the two want
+  // opposite things from the pins already on the globe.
+  game: {type: Number, default: 0},
 })
 
 const emit = defineEmits(['guess'])
@@ -149,6 +153,14 @@ let targetPin = null
 let link = null
 let countryOutline = null
 let regionOutline = null
+// Pins and links from rounds already played this game. They stay put so the
+// globe accumulates the game as it goes, and the summary at the end has all
+// five guesses and answers standing on it.
+let history = []
+// The guess pin's colour, fixed at the moment the answer landed. props.accuracy
+// is back to its 1 default by the time the round is cleared, so reading it then
+// would retire every guess as a perfect one.
+let settledColour = null
 // Guess site, in radians.
 let guess = null
 let cursorHandler = null
@@ -357,6 +369,7 @@ function revealTarget() {
     latitude: Cesium.Math.toRadians(props.target.lat),
   }
   targetPin = addPin(() => site, () => TARGET_COLOUR)
+  settledColour = accuracyColour(props.accuracy)
   if (!guess) return
 
   const clamped = Cesium.GroundPolylinePrimitive.isSupported(viewer.scene)
@@ -526,23 +539,63 @@ function lift(ring, height) {
   return out
 }
 
-// Clear the round's markers and pull back out to the whole globe, so the next
-// city starts from the same blank slate every time.
-function clearRound() {
+// Close the round out and pull back to the whole globe. `restarting` marks a
+// new game, where the round that just finished is thrown away with the rest of
+// the history rather than joining it.
+//
+// The outlines go either way, and deliberately: a border left standing is a
+// straight edge on the next city in that country, which is the one hint this
+// game must not hand out. The pins mark where a round happened; an outline
+// would mark where the next one is.
+function clearRound(restarting) {
   if (!viewer || viewer.isDestroyed()) return
 
-  for (const entity of [pin, targetPin, link]) {
-    if (entity) viewer.entities.remove(entity)
+  if (restarting) {
+    for (const entity of [pin, targetPin, link]) {
+      if (entity) viewer.entities.remove(entity)
+    }
+    pin = null
+    targetPin = null
+    link = null
+    clearHistory()
+  } else {
+    retireRound()
   }
-  pin = null
-  targetPin = null
-  link = null
   clearOutlines()
   guess = null
+  settledColour = null
   pinDiameterLabel.value = DROP_HINT
   pinLengthLabel.value = ''
 
   liftForNextRound()
+}
+
+// Hand this round's markers to the history. The guess pin has to be rebuilt:
+// its site and colour are callbacks reading `guess` and props.accuracy every
+// frame, so left as it is it would walk to the next round's pin drop and take
+// that round's score for its colour. The answer pin and the link are already
+// fixed and carry over untouched.
+//
+// The link goes with them on purpose. Five guesses and five answers scattered
+// over a globe say nothing about which went with which; the dashes are what
+// makes the pair readable as a round.
+function retireRound() {
+  if (pin) {
+    const site = guess
+    const colour = settledColour ?? accuracyColour(props.accuracy)
+    viewer.entities.remove(pin)
+    history.push(addPin(() => site, () => colour))
+  }
+  if (targetPin) history.push(targetPin)
+  if (link) history.push(link)
+  pin = null
+  targetPin = null
+  link = null
+}
+
+function clearHistory() {
+  for (const entity of history) viewer.entities.remove(entity)
+  history = []
 }
 
 // Primitives live on the scene rather than in the entity collection, so they
@@ -608,7 +661,14 @@ watch(
 // A new city wipes the board. Advancing bumps `round` and drops `revealed` in
 // the same tick, so this runs alongside the watcher above — which is why that
 // one only ever acts on the rising edge.
-watch(() => props.round, clearRound)
+// Watched as a pair rather than as two watchers: a restart moves both counters
+// in the same tick, and split across two callbacks whether the finished round
+// joined the history or was cleared with it would come down to which watcher
+// happened to be registered first.
+watch(
+  () => [props.game, props.round],
+  ([game], [wasGame]) => clearRound(game !== wasGame),
+)
 
 onMounted(() => {
   const imagery = Cesium.ImageryLayer.fromProviderAsync(
@@ -691,6 +751,8 @@ onBeforeUnmount(() => {
   link = null
   countryOutline = null
   regionOutline = null
+  history = []
+  settledColour = null
   guess = null
   cursor = null
 })

@@ -23,6 +23,10 @@ const over = ref(false)
 // off this rather than off the city itself, since two games running back to
 // back can legitimately draw the same city and an identity check would miss it.
 const round = ref(0)
+// Bumped only on a restart. The globe keeps every round's pins for the length
+// of a game, so it has to tell a new city from a new game -- `round` moves for
+// both.
+const game = ref(0)
 
 const city = computed(() => cities.value[index.value])
 const revealed = computed(() => result.value !== null)
@@ -54,6 +58,7 @@ function advance() {
 }
 
 function restart() {
+  game.value += 1
   cities.value = pickRound()
   index.value = 0
   result.value = null
@@ -86,6 +91,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown))
   <div class="app">
     <Globe
       :accuracy="accuracy"
+      :game="game"
       :revealed="revealed"
       :round="round"
       :target="city"
