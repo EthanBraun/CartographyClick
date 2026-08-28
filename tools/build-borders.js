@@ -216,11 +216,128 @@ function firstOf(properties, ...keys) {
   return null
 }
 
-async function build(file, describe) {
+// Natural Earth ships a handful of admin-0 features that are a legal status
+// rather than a place: land one state leases from another, and the strip
+// between two ceasefire lines. A city standing on one is not "in" it the way it
+// is in a country -- Guantanamo Bay is in Cuba, Nicosia is in Cyprus -- but
+// each is the smallest feature containing the point, and the lookup takes the
+// smallest. Dropping them here is what lets it answer with the country.
+function isPlace(p) {
+  const name = String(firstOf(p, 'NAME_EN', 'NAME', 'name') ?? '')
+  // Baikonur and Guantanamo Bay. Both record their landlord as sovereign.
+  if (firstOf(p, 'TYPE', 'type') === 'Lease') return false
+  // The UN buffer zone across Cyprus, which Nicosia sits astride.
+  if (/buffer zone/i.test(name)) return false
+  return true
+}
+
+// A hole in a country is there to make room for another one -- Lesotho inside
+// South Africa, San Marino inside Italy. Dropping the features above leaves
+// some holes with nothing left to make room for, and a hole with nothing in it
+// is a stray ring drawn across a country that also swallows every point landing
+// inside it. Those get filled back in.
+//
+// Only those, though: the test is "was this hole made for a feature we just
+// dropped", not "is anything inside it now". The second question gets Madha
+// wrong -- an Omani exclave in the UAE which itself contains Nahwa, a UAE
+// counter-exclave -- because a point in Nahwa is inside no feature but the UAE
+// that owns the hole, and the hole would be filled over a real border.
+function withoutOrphanHoles(feature, dropped) {
+  const geometry = feature.geometry
+  if (!geometry) return geometry
+  const polygons =
+    geometry.type === 'Polygon' ? [geometry.coordinates] : geometry.coordinates
+
+  let filled = 0
+  const out = polygons.map((polygon) => {
+    const rings = [polygon[0]]
+    for (let i = 1; i < polygon.length; i++) {
+      if (vacated(polygon[i], dropped)) filled++
+      else rings.push(polygon[i])
+    }
+    return rings
+  })
+  if (!filled) return geometry
+
+  process.stderr.write(
+    `  filled ${filled} orphan hole(s) in ${firstOf(feature.properties, 'NAME_EN', 'NAME')}
+`,
+  )
+  return geometry.type === 'Polygon'
+    ? {type: 'Polygon', coordinates: out[0]}
+    : {type: 'MultiPolygon', coordinates: out}
+}
+
+// Was this hole cut for one of the features that just got dropped?
+function vacated(ring, dropped) {
+  const point = interiorPoint(ring)
+  // A ring whose average falls outside itself is too odd to judge; leave it be.
+  if (!point) return false
+  return dropped.some((f) => containsPoint(f.geometry, point[0], point[1]))
+}
+
+// The average of a ring's vertices, which for these roughly convex holes lands
+// inside. Verified rather than assumed, since a crescent's would not.
+function interiorPoint(ring) {
+  // GeoJSON repeats the first vertex as the last; leave it out of the average.
+  const n = ring.length - 1
+  if (n < 3) return null
+  let x = 0
+  let y = 0
+  for (let i = 0; i < n; i++) {
+    x += ring[i][0]
+    y += ring[i][1]
+  }
+  x /= n
+  y /= n
+  return inRing(ring, x, y) ? [x, y] : null
+}
+
+function containsPoint(geometry, x, y) {
+  if (!geometry) return false
+  const polygons =
+    geometry.type === 'Polygon' ? [geometry.coordinates] : geometry.coordinates
+  for (const polygon of polygons) {
+    if (!inRing(polygon[0], x, y)) continue
+    let hole = false
+    for (let i = 1; i < polygon.length && !hole; i++) {
+      hole = inRing(polygon[i], x, y)
+    }
+    if (!hole) return true
+  }
+  return false
+}
+
+// Even-odd crossing count, on [lon, lat] pairs.
+function inRing(ring, x, y) {
+  let inside = false
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const xi = ring[i][0]
+    const yi = ring[i][1]
+    const xj = ring[j][0]
+    const yj = ring[j][1]
+    if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) {
+      inside = !inside
+    }
+  }
+  return inside
+}
+
+async function build(file, describe, {keep = () => true, mendHoles = false} = {}) {
   const source = await fetchSource(file)
+  const kept = source.features.filter((f) => keep(f.properties))
+  const dropped = source.features.filter((f) => !keep(f.properties))
+  if (dropped.length) {
+    const names = dropped.map((f) => firstOf(f.properties, 'NAME_EN', 'NAME', 'name'))
+    process.stderr.write(`  dropped from ${file}: ${names.join(', ')}
+`)
+  }
+
   const features = []
-  for (const feature of source.features) {
-    const geometry = encodeFeature(feature.geometry)
+  for (const feature of kept) {
+    const geometry = encodeFeature(
+      mendHoles ? withoutOrphanHoles(feature, dropped) : feature.geometry,
+    )
     if (!geometry) continue
     features.push({...describe(feature.properties), ...geometry})
   }
@@ -228,17 +345,29 @@ async function build(file, describe) {
 }
 
 async function main() {
-  const countries = await build(SOURCES.countries, (p) => ({
-    n: firstOf(p, 'NAME_EN', 'NAME', 'name'),
-    // ISO 3166-1 alpha-3, which is how a subdivision names its country.
-    a: firstOf(p, 'ADM0_A3', 'adm0_a3'),
-  }))
-  const regions = await build(SOURCES.regions, (p) => ({
-    n: firstOf(p, 'name_en', 'name'),
-    a: firstOf(p, 'adm0_a3'),
-    // "State", "Province", "Oblast" -- shown next to the subdivision's name.
-    t: firstOf(p, 'type_en', 'type'),
-  }))
+  const countries = await build(
+    SOURCES.countries,
+    (p) => ({
+      n: firstOf(p, 'NAME_EN', 'NAME', 'name'),
+      // ISO 3166-1 alpha-3, which is how a subdivision names its country.
+      a: firstOf(p, 'ADM0_A3', 'adm0_a3'),
+    }),
+    {keep: isPlace, mendHoles: true},
+  )
+
+  const shipped = new Set(countries.map((c) => c.a))
+  const regions = await build(
+    SOURCES.regions,
+    (p) => ({
+      n: firstOf(p, 'name_en', 'name'),
+      a: firstOf(p, 'adm0_a3'),
+      // "State", "Province", "Oblast" -- shown next to the subdivision's name.
+      t: firstOf(p, 'type_en', 'type'),
+    }),
+    // Subdivisions are only ever reached through their country, so one whose
+    // country is no longer shipped can never be looked up.
+    {keep: (p) => shipped.has(firstOf(p, 'adm0_a3'))},
+  )
 
   fs.mkdirSync(OUT_DIR, {recursive: true})
   for (const [name, features] of [
