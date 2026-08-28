@@ -665,6 +665,11 @@ const TIERS = [
 
 export const ROUNDS_PER_GAME = TIERS.length
 
+// Every place in the pool, tiers flattened away. Study mode asks for a
+// country's cities rather than for a round's, so the difficulty banding that
+// TIERS exists to express is exactly what it does not want.
+export const ALL_PLACES = TIERS.flat()
+
 // Drawing uniformly at random felt far more repetitive than it should have:
 // with one place taken per round, a pool of N collides with itself after
 // roughly sqrt(N) games. Keeping a recent list per round and drawing only from

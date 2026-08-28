@@ -1,7 +1,7 @@
 <script setup>
 import {onBeforeUnmount, onMounted, ref, watch} from 'vue'
 import * as Cesium from 'cesium'
-import {loadBorders, outlineFor} from '../game/borders'
+import {countryAt, countryRings, loadBorders, outlineFor} from '../game/borders'
 
 // ESRI's public World Imagery service: Google-Earth-style satellite basemap
 // with a full tile pyramid, so zooming pulls in progressively finer LoD.
@@ -93,6 +93,28 @@ const REGION_BORDER_WIDTH = 2
 const OUTLINE_FIRST_CHUNK = 1
 const OUTLINE_CHUNK_GROWTH = 4
 
+// Select mode lights two things and no more: the country under the cursor, and
+// the ones already picked. White for the hover, because it is the thing that
+// moves and has to be findable the instant it changes; gold for a selection,
+// because it has to keep reading while the cursor is somewhere else entirely.
+// Both sit off the reveal's blue -- a border you picked must never be mistaken
+// for a border that was an answer.
+const HOVER_BORDER_COLOUR = Cesium.Color.WHITE.withAlpha(0.95)
+const SELECTED_BORDER_COLOUR = Cesium.Color.fromHsl(43 / 360, 0.95, 0.58, 0.95)
+const SELECT_BORDER_WIDTH = 3
+
+// Outlines are kept once built rather than dropped when the cursor leaves:
+// sweeping back and forth over the same two or three countries is what picking
+// a set actually looks like, and rebuilding Canada's 412 rings each way is not
+// free. Selected countries never count against this -- they are on screen
+// continuously, and evicting one would blank a border being looked at.
+const OUTLINE_CACHE_MAX = 16
+
+// Whole-globe framing to pick countries from. Far enough out that a country is
+// a thing you can point at, and level, since picking is done off shape.
+const SELECT_HEIGHT = 20_000_000
+const SELECT_FLIGHT_SECONDS = 1.2
+
 // Revealing frames both pins. Cesium puts the camera exactly far enough to fit
 // the bounding sphere, which crops to the two pins and nothing else — no
 // coastline, no country, nothing to read the miss against. Padding the radius
@@ -142,9 +164,17 @@ const props = defineProps({
   // its own it cannot tell "next city" from "start over" -- and the two want
   // opposite things from the pins already on the globe.
   game: {type: Number, default: 0},
+  // True while the globe is being used to pick countries instead of to play a
+  // round. Select mode reuses all of this -- the same camera, the same F, the
+  // same outline builder -- so it is a flag on this component rather than a
+  // second one.
+  selecting: {type: Boolean, default: false},
+  // Country codes picked so far. The parent owns the list; this only draws it,
+  // so what is lit on the globe cannot drift from what the HUD says is picked.
+  selected: {type: Array, default: () => []},
 })
 
-const emit = defineEmits(['guess'])
+const emit = defineEmits(['guess', 'hover', 'toggle'])
 
 const container = ref(null)
 let viewer = null
@@ -165,9 +195,24 @@ let settledColour = null
 let guess = null
 let cursorHandler = null
 let removeReadout = null
+let removeHover = null
 let removeZoomStep = null
 // Latest cursor position over the canvas, in screen pixels.
 let cursor = null
+
+// --- select mode ---
+// The country under the cursor, as {code, name}.
+let hovered = null
+// One built outline per country drawn so far, keyed by code. A Map because it
+// is insertion-ordered, which is the whole of the eviction policy below.
+const selectOutlines = new Map()
+// Where the camera stood when select mode opened, to put it back on the way
+// out, and which game it opened on -- see leaveSelect() for what that is for.
+let savedView = null
+let selectedGame = 0
+// Enough of the last hover lookup to tell whether anything has moved since.
+let hoverCursor = null
+const hoverCamera = new Cesium.Cartesian3()
 
 function onKeyDown(event) {
   if (event.key.toLowerCase() !== DROP_KEY) return
@@ -176,7 +221,14 @@ function onKeyDown(event) {
   if (event.repeat || event.ctrlKey || event.metaKey || event.altKey) return
 
   event.preventDefault()
-  dropPin()
+  // Same gesture either way -- the mouse aims and F commits. What it commits
+  // in select mode is a country rather than a guess.
+  if (props.selecting) toggleHovered()
+  else dropPin()
+}
+
+function toggleHovered() {
+  if (hovered) emit('toggle', hovered)
 }
 
 function dropPin() {
@@ -242,6 +294,7 @@ const SCALE_TARGET_PX = 170
 const scaleBarPx = ref(0)
 const scaleLabel = ref('')
 const DROP_HINT = `drop a pin with ${DROP_KEY.toUpperCase()}`
+const SELECT_HINT = `pick a country with ${DROP_KEY.toUpperCase()}`
 const pinDiameterLabel = ref(DROP_HINT)
 const pinLengthLabel = ref('')
 const altitudeLabel = ref('')
@@ -316,7 +369,9 @@ function updateReadout() {
   const label = formatMiles(nice)
   if (label !== scaleLabel.value) scaleLabel.value = label
 
-  if (!guess) return
+  // In select mode the pin is hidden and the line below it says what F does
+  // there instead, so leave both alone.
+  if (!guess || props.selecting) return
   const surface = Cesium.Cartesian3.fromRadians(guess.longitude, guess.latitude, 0)
   const radius = pinRadius(surface)
   const diameter = formatMiles((radius * 2) / METRES_PER_MILE)
@@ -459,7 +514,11 @@ function addOutline(rings, colour, width) {
   const clamped = Cesium.GroundPolylinePrimitive.isSupported(viewer.scene)
   // Vertex count stands in for how much of the outline a ring accounts for.
   const ordered = [...rings].sort((a, b) => b.length - a.length)
-  const outline = {primitives: [], stop: null}
+  // Colour and visibility live on the outline, not only in the primitives it
+  // has built so far: an outline is still filling long after it is first
+  // painted, and a chunk built at that point has to come out matching what is
+  // already on screen rather than the arguments this was called with.
+  const outline = {primitives: [], stop: null, colour, show: true}
 
   let drawn = 0
   let size = OUTLINE_FIRST_CHUNK
@@ -470,8 +529,9 @@ function addOutline(rings, colour, width) {
     size *= OUTLINE_CHUNK_GROWTH
 
     const primitive = viewer.scene.primitives.add(
-      buildOutline(chunk, colour, width, clamped),
+      buildOutline(chunk, outline.colour, width, clamped),
     )
+    primitive.show = outline.show
     outline.primitives.push(primitive)
     if (drawn >= ordered.length) return
 
@@ -530,6 +590,23 @@ function stopFilling(outline) {
   if (!outline || !outline.stop) return
   outline.stop()
   outline.stop = null
+}
+
+// Repaint an outline where it stands. Cesium holds an appearance's colour as a
+// shader uniform, so this is one uniform write per primitive rather than a
+// rebuild -- which is what makes sweeping the cursor across a continent cheap.
+function setOutlineColour(outline, colour) {
+  if (outline.colour === colour) return
+  outline.colour = colour
+  for (const primitive of outline.primitives) {
+    primitive.appearance.material.uniforms.color = colour
+  }
+}
+
+function setOutlineShown(outline, show) {
+  if (outline.show === show) return
+  outline.show = show
+  for (const primitive of outline.primitives) primitive.show = show
 }
 
 // Flat [lon, lat, ...] to flat [lon, lat, height, ...].
@@ -602,14 +679,17 @@ function clearHistory() {
 // need removing by hand. `remove` destroys them, which is what we want.
 function clearOutlines() {
   for (const outline of [countryOutline, regionOutline]) {
-    if (!outline) continue
-    stopFilling(outline)
-    for (const primitive of outline.primitives) {
-      viewer.scene.primitives.remove(primitive)
-    }
+    if (outline) destroyOutline(outline)
   }
   countryOutline = null
   regionOutline = null
+}
+
+function destroyOutline(outline) {
+  stopFilling(outline)
+  for (const primitive of outline.primitives) {
+    viewer.scene.primitives.remove(primitive)
+  }
 }
 
 // What the camera is aimed at, which after a reveal is not the same as what it
@@ -648,6 +728,184 @@ function liftForNextRound() {
     duration: NEXT_ROUND_FLIGHT_SECONDS,
   })
 }
+
+// ---------------------------------------------------------------------------
+// Select mode
+// ---------------------------------------------------------------------------
+
+// The globe becomes the country picker: the cursor names one, F takes it.
+// Nothing here keeps a list -- the parent owns the selection and hands it back
+// as props.selected, so what is lit on the globe and what the HUD says is
+// picked are the same fact read twice.
+function enterSelect() {
+  showPlayMarkers(false)
+  pinDiameterLabel.value = SELECT_HINT
+  pinLengthLabel.value = ''
+  selectedGame = props.game
+
+  const {camera} = viewer
+  savedView = {
+    destination: Cesium.Cartesian3.clone(camera.positionWC),
+    orientation: {heading: camera.heading, pitch: camera.pitch, roll: camera.roll},
+  }
+  // Pull out to where countries are things you can point at, holding whatever
+  // ground was on screen under the middle of it. Opening the mode at the
+  // altitude a reveal leaves would open it on one valley somewhere.
+  const site = lookAtCartographic() ?? camera.positionCartographic
+  camera.flyTo({
+    destination: Cesium.Cartesian3.fromRadians(
+      site.longitude,
+      site.latitude,
+      SELECT_HEIGHT,
+    ),
+    orientation: {heading: 0, pitch: -Cesium.Math.PI_OVER_TWO, roll: 0},
+    duration: SELECT_FLIGHT_SECONDS,
+  })
+}
+
+function leaveSelect() {
+  hovered = null
+  hoverCursor = null
+  emit('hover', null)
+  dropSelectOutlines()
+  showPlayMarkers(true)
+  pinDiameterLabel.value = DROP_HINT
+
+  // The camera goes back only if the game it left is the game being returned
+  // to. Leaving select mode to start a study run bumps `game`, and a new game
+  // opens the way every new game opens -- restoring the paused game's camera
+  // there would hand the first city a view of where the last one was.
+  const view = savedView
+  savedView = null
+  if (view && props.game === selectedGame) {
+    viewer.camera.flyTo({...view, duration: SELECT_FLIGHT_SECONDS})
+  }
+}
+
+// Everything the game has standing on the globe, hidden for the length of
+// select mode. Hidden rather than removed: the paused game still owns these
+// and is going to want them back.
+function showPlayMarkers(show) {
+  for (const entity of [pin, targetPin, link, ...history]) {
+    if (entity) entity.show = show
+  }
+  for (const outline of [countryOutline, regionOutline]) {
+    if (outline) setOutlineShown(outline, show)
+  }
+}
+
+// Which country the cursor is over, resolved only when there is a reason to.
+// The lookup is under a millisecond and this runs every frame, which is a
+// millisecond a frame spent on nothing while cursor and camera both sit still.
+// Either one moving can change the answer -- the globe turns under a
+// stationary cursor -- so both are watched.
+function updateHover() {
+  if (!viewer || viewer.isDestroyed() || !props.selecting || !cursor) return
+
+  const eye = viewer.camera.positionWC
+  const moved =
+    !hoverCursor ||
+    !Cesium.Cartesian2.equals(cursor, hoverCursor) ||
+    !Cesium.Cartesian3.equalsEpsilon(eye, hoverCamera, Cesium.Math.EPSILON7)
+  if (!moved) return
+  hoverCursor = Cesium.Cartesian2.clone(cursor, hoverCursor)
+  Cesium.Cartesian3.clone(eye, hoverCamera)
+
+  const country = countryUnder(cursor)
+  if (country?.code === hovered?.code) return
+  hovered = country
+  emit('hover', country)
+  paintSelection()
+}
+
+// Null over space, and null over ocean no coast is near enough to claim -- the
+// same forgiveness the reveal gets, which is what lets a country be picked by
+// pointing just off its shore.
+function countryUnder(position) {
+  const ray = viewer.camera.getPickRay(position)
+  const ground = ray ? viewer.scene.globe.pick(ray, viewer.scene) : undefined
+  if (!Cesium.defined(ground)) return null
+  const carto = Cesium.Cartographic.fromCartesian(ground)
+  return countryAt(
+    Cesium.Math.toDegrees(carto.latitude),
+    Cesium.Math.toDegrees(carto.longitude),
+  )
+}
+
+// Light what should be lit and dim what should not, in one pass over the
+// cache. One pass rather than two because the hover and the selection change
+// in the same frame -- F takes the country the cursor is already on -- and
+// painting them separately leaves whichever ran first to be undone by the one
+// that ran second.
+function paintSelection() {
+  if (!viewer || viewer.isDestroyed()) return
+  const selected = new Set(props.selected)
+
+  if (props.selecting) {
+    for (const code of [...selected, hovered?.code]) {
+      if (code) buildSelectOutline(code)
+    }
+  }
+
+  for (const [code, outline] of selectOutlines) {
+    const lit = props.selecting && (selected.has(code) || code === hovered?.code)
+    setOutlineShown(outline, lit)
+    // Selected beats hovered: pointing at a country already picked must not
+    // make it look unpicked.
+    if (lit) {
+      setOutlineColour(
+        outline,
+        selected.has(code) ? SELECTED_BORDER_COLOUR : HOVER_BORDER_COLOUR,
+      )
+    }
+  }
+
+  pruneSelectOutlines(selected)
+}
+
+function buildSelectOutline(code) {
+  const cached = selectOutlines.get(code)
+  if (cached) {
+    // Re-insert, so the Map orders least-recently-wanted first and the prune
+    // below is just a walk from the front.
+    selectOutlines.delete(code)
+    selectOutlines.set(code, cached)
+    return cached
+  }
+
+  const rings = countryRings(code)
+  if (!rings) return null
+  const outline = addOutline(rings, HOVER_BORDER_COLOUR, SELECT_BORDER_WIDTH)
+  selectOutlines.set(code, outline)
+  return outline
+}
+
+function pruneSelectOutlines(selected) {
+  for (const [code, outline] of selectOutlines) {
+    if (selectOutlines.size <= OUTLINE_CACHE_MAX) return
+    if (selected.has(code) || code === hovered?.code) continue
+    destroyOutline(outline)
+    selectOutlines.delete(code)
+  }
+}
+
+function dropSelectOutlines() {
+  for (const outline of selectOutlines.values()) destroyOutline(outline)
+  selectOutlines.clear()
+}
+
+watch(
+  () => props.selecting,
+  (selecting) => {
+    if (selecting) enterSelect()
+    else leaveSelect()
+    paintSelection()
+  },
+)
+
+// Joined rather than deep-watched: the parent replaces the array on every
+// change, and a list of codes is its own identity.
+watch(() => props.selected.join(), paintSelection)
 
 watch(
   () => props.revealed,
@@ -724,6 +982,7 @@ onMounted(() => {
   window.addEventListener('resize', applyMinimumZoom)
   removeZoomStep = scene.postRender.addEventListener(updateZoomStep)
   removeReadout = scene.postRender.addEventListener(updateReadout)
+  removeHover = scene.postRender.addEventListener(updateHover)
 
   // Start the border files downloading now rather than at the first reveal —
   // there is a whole round of aiming to cover the few MB. A failure here is
@@ -738,12 +997,16 @@ onBeforeUnmount(() => {
   removeReadout = null
   if (removeZoomStep) removeZoomStep()
   removeZoomStep = null
+  if (removeHover) removeHover()
+  removeHover = null
   if (cursorHandler && !cursorHandler.isDestroyed()) cursorHandler.destroy()
   cursorHandler = null
   // Before the viewer goes, while its postRender event is still there to
   // detach from.
   stopFilling(countryOutline)
   stopFilling(regionOutline)
+  for (const outline of selectOutlines.values()) stopFilling(outline)
+  selectOutlines.clear()
   if (viewer && !viewer.isDestroyed()) viewer.destroy()
   viewer = null
   pin = null
@@ -755,6 +1018,9 @@ onBeforeUnmount(() => {
   settledColour = null
   guess = null
   cursor = null
+  hovered = null
+  hoverCursor = null
+  savedView = null
 })
 </script>
 

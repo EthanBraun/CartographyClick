@@ -88,6 +88,43 @@ export function outlineFor({lat, lon, region}) {
   }
 }
 
+// The country a point falls in, as {code, name}, or null where nothing
+// resolves -- open ocean, or a call made before loadBorders() has settled.
+// Deliberately the same lookup the reveal outlines with, so what a hover names
+// and what the globe draws around it cannot disagree.
+export function countryAt(lat, lon) {
+  if (!countries) return null
+  const feature = locate(countries, lat, lon)
+  return feature ? {code: feature.a, name: countryName(feature.n)} : null
+}
+
+// Decoded rings for one country, flat [lon, lat, ...] apiece. Kept apart from
+// countryAt because a hover happens every time the cursor crosses a border and
+// has no business decoding Canada's 412 rings to answer "which country".
+export function countryRings(code) {
+  const feature = countries?.find((f) => f.a === code)
+  return feature ? feature.p.flat().map(decodeRing) : null
+}
+
+// Natural Earth writes a handful of names out in full. That is right for a
+// data file and wrong for a line of HUD read at a glance, so the long forms
+// are shortened to what the rest of the game calls them. Everything not listed
+// is already the short name.
+const SHORT_NAMES = new Map([
+  ["People's Republic of China", 'China'],
+  ['United States of America', 'United States'],
+  ['Democratic Republic of the Congo', 'DR Congo'],
+  ['Republic of the Congo', 'Congo'],
+  ['Czech Republic', 'Czechia'],
+  ['Federated States of Micronesia', 'Micronesia'],
+  ['Turkish Republic of Northern Cyprus', 'Northern Cyprus'],
+  ['United States Virgin Islands', 'US Virgin Islands'],
+])
+
+function countryName(name) {
+  return SHORT_NAMES.get(name) ?? name
+}
+
 // Natural Earth has subdivisions for every country, but the game only claims
 // one for some: the reveal panel says "New York, United States" and plain
 // "France". Outlining Ile-de-France under a card that says France asserts a
