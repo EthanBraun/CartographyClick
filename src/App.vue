@@ -368,6 +368,7 @@ onBeforeUnmount(() => {
            enterSelect() refuses it, so the bar only ever has a game to run. -->
       <TouchBar
         v-if="touch"
+        :last="run.index >= rounds - 1"
         :over="run.over"
         :revealed="revealed"
         @advance="advance"

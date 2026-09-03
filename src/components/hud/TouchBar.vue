@@ -9,6 +9,9 @@
 // so there are three moments, and one button for each.
 defineProps({
   revealed: {type: Boolean, default: false},
+  // True on the run's last city. Advancing from there brings up the score
+  // rather than a city, and `over` only says so once it has happened.
+  last: {type: Boolean, default: false},
   over: {type: Boolean, default: false},
 })
 
@@ -21,9 +24,9 @@ defineEmits(['commit', 'advance', 'restart'])
   <nav class="bar">
     <button v-if="over" @click="$emit('restart')">play again</button>
     <button v-else-if="revealed" @click="$emit('advance')">
-      next city
+      {{ last ? 'see the score' : 'next city' }}
     </button>
-    <button v-else @click="$emit('commit')">drop the pin</button>
+    <button v-else @click="$emit('commit')">drop pin</button>
   </nav>
 </template>
 
