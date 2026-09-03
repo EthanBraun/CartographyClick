@@ -123,7 +123,10 @@ function onGuess(guess) {
   if (revealed.value) return
   const distanceKm = greatCircleKm(guess, city.value)
   const points = roundPoints(distanceKm)
-  run.value.result = {distanceKm, points, awarded: points * multiplier.value}
+  // The multiplier is kept on the entry rather than re-derived: awarded / points
+  // is undefined on a zero-point round, and the summary shows it either way.
+  const m = multiplier.value
+  run.value.result = {distanceKm, points, multiplier: m, awarded: points * m}
   run.value.scored.push(run.value.result)
 }
 

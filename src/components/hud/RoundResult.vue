@@ -3,7 +3,7 @@
 import {formatKm} from './format'
 
 defineProps({
-  // {distanceKm, points, awarded}
+  // {distanceKm, points, multiplier, awarded}
   result: {type: Object, required: true},
   multiplier: {type: Number, default: 1},
 })
@@ -20,7 +20,8 @@ defineProps({
       <span class="value">
         {{ result.points }}
         <template v-if="multiplier > 1">
-          <span class="dim">&times;{{ multiplier }} =</span>
+          <span :class="'mult-' + multiplier">&times;{{ multiplier }}</span>
+          <span class="dim">=</span>
           {{ result.awarded }}
         </template>
       </span>

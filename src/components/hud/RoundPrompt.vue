@@ -20,7 +20,7 @@ defineProps({
       </template>
       <template v-else>
         round {{ index + 1 }} of {{ rounds }}
-        <span class="multiplier">&times;{{ multiplier }}</span>
+        <span class="multiplier" :class="'mult-' + multiplier">&times;{{ multiplier }}</span>
       </template>
     </div>
     <h1 class="city">{{ city.name }}</h1>
@@ -32,7 +32,6 @@ defineProps({
 <style scoped>
 .multiplier {
   margin-left: 6px;
-  color: #e8c46a;
 }
 
 /* Says what mode you are in where the multiplier sits in a game, since the two

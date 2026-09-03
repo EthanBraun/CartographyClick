@@ -9,7 +9,7 @@ defineProps({
   percent: {type: Number, required: true},
   total: {type: Number, required: true},
   maxScore: {type: Number, required: true},
-  // One {distanceKm, points, awarded} per round played, in order.
+  // One {distanceKm, points, multiplier, awarded} per round played, in order.
   scored: {type: Array, required: true},
   // The run's cities, in the same order.
   cities: {type: Array, required: true},
@@ -28,6 +28,10 @@ defineProps({
       <li v-for="(entry, i) in scored" :key="i">
         <span class="breakdown-city">{{ cities[i].name }}</span>
         <span class="breakdown-distance">{{ formatKm(entry.distanceKm) }}</span>
+        <!-- A study run is flat, so the working would be "82 x1" thirty times. -->
+        <span v-if="!studying" class="breakdown-working">
+          {{ entry.points }}<span class="mult" :class="'mult-' + entry.multiplier">&times;{{ entry.multiplier }}</span>
+        </span>
         <span class="breakdown-points">{{ entry.awarded }}</span>
       </li>
     </ol>
@@ -100,7 +104,7 @@ defineProps({
 
 .breakdown li {
   display: grid;
-  grid-template-columns: 1fr auto 52px;
+  grid-template-columns: 1fr auto auto 52px;
   gap: 14px;
   padding: 3px 0;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
@@ -113,6 +117,17 @@ defineProps({
 .breakdown-distance {
   color: #9aa;
   font-variant-numeric: tabular-nums;
+}
+
+/* The 0-100 score and its multiplier, so the awarded column reads as a
+   product rather than a mystery. */
+.breakdown-working {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.mult {
+  margin-left: 3px;
 }
 
 .breakdown-points {
