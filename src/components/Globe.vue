@@ -3,18 +3,18 @@
 // viewer's lifetime and the cursor, turns the parent's props into calls on
 // the modules under globe/, and turns what they find into events back up.
 // What is drawn, how it is built and where the camera flies all live there.
-import {onBeforeUnmount, onMounted, ref, watch} from 'vue'
+import {computed, onBeforeUnmount, onMounted, ref, watch} from 'vue'
 import * as Cesium from 'cesium'
 import {loadBorders, outlineFor} from '../game/borders'
 import {
   applyMinimumZoom,
   captureView,
+  easeZoom,
   flyToReveal,
   flyToSelect,
   liftForNextRound,
   restoreView,
   startFinale,
-  updateZoomStep,
 } from './globe/camera'
 import {createMarkers} from './globe/markers'
 import ScaleReadout from './globe/ScaleReadout.vue'
@@ -50,6 +50,12 @@ const props = defineProps({
   // Country codes picked so far. The parent owns the list; this only draws it,
   // so what is lit on the globe cannot drift from what the HUD says is picked.
   selected: {type: Array, default: () => []},
+  // True on a phone or tablet, where there is no cursor to aim with. The aim
+  // is the middle of the screen instead, marked with a crosshair, and the
+  // globe is dragged under it -- the same gesture the game already has, with
+  // the two halves swapped. The commit comes from a button the parent shows in
+  // place of the key hints, through commit() below.
+  touch: {type: Boolean, default: false},
 })
 
 const emit = defineEmits(['guess', 'hover', 'toggle'])
@@ -64,6 +70,9 @@ let select = null
 let cursorHandler = null
 // Latest cursor position over the canvas, in screen pixels.
 let cursor = null
+// The middle of the canvas, for aiming by touch. Kept and rewritten in place
+// rather than allocated, since it is read every frame.
+const center = new Cesium.Cartesian2()
 // Everything registered on the window and the scene, torn down together.
 let detach = []
 // Where the camera stood when select mode opened, to put it back on the way
@@ -88,22 +97,48 @@ function onKeyDown(event) {
   if (event.repeat || event.ctrlKey || event.metaKey || event.altKey) return
 
   event.preventDefault()
-  // Same gesture either way -- the mouse aims and F commits. What it commits
-  // in select mode is a country rather than a guess.
+  commit()
+}
+
+// What F does, and what the touch button for it does: take whatever is under
+// the aim. Same gesture either way -- the aim points and this commits. What
+// it commits in select mode is a country rather than a guess.
+function commit() {
   if (props.selecting) toggleHovered()
   else dropPin()
 }
+
+defineExpose({commit})
+
+// Where a commit lands, in screen pixels: under the cursor, or under the
+// crosshair when there is no cursor. Null before the mouse has ever crossed
+// the canvas.
+function aim() {
+  if (!props.touch) return cursor
+  const {canvas} = viewer.scene
+  center.x = canvas.clientWidth / 2
+  center.y = canvas.clientHeight / 2
+  return center
+}
+
+// Whether there is anything to aim at right now, which is when the crosshair
+// shows. Not once the answer is up, and not behind the score card.
+const aiming = computed(
+  () => props.selecting || (props.target !== null && !props.revealed && !props.over),
+)
 
 function toggleHovered() {
   if (select.hovered) emit('toggle', select.hovered)
 }
 
 function dropPin() {
-  if (!live() || !cursor) return
+  if (!live()) return
   // One guess per city — once the answer is showing, the round is closed.
   if (!props.target || props.revealed) return
+  const at = aim()
+  if (!at) return
 
-  const ray = viewer.camera.getPickRay(cursor)
+  const ray = viewer.camera.getPickRay(at)
   if (!ray) return
 
   // Picking the globe rather than the depth buffer means a cursor out over
@@ -288,8 +323,8 @@ onMounted(() => {
   detach = [
     () => window.removeEventListener('keydown', onKeyDown),
     () => window.removeEventListener('resize', onResize),
-    scene.postRender.addEventListener(() => updateZoomStep(viewer)),
-    scene.postRender.addEventListener(() => select.update(cursor)),
+    easeZoom(viewer),
+    scene.postRender.addEventListener(() => select.update(aim())),
   ]
   readout.value.attach(viewer, () => markers.guess)
 
@@ -324,6 +359,7 @@ onBeforeUnmount(() => {
   <div ref="container" class="globe">
     <!-- TEMPORARY measuring aid -->
     <ScaleReadout ref="readout" :drop-key="DROP_KEY" :selecting="selecting" />
+    <div v-if="touch && aiming" class="crosshair" aria-hidden="true"></div>
   </div>
 </template>
 
@@ -331,6 +367,38 @@ onBeforeUnmount(() => {
 .globe {
   width: 100%;
   height: 100%;
+}
+
+/* The aim, on touch: a ring on the exact pixel a commit picks, open in the
+   middle so the ground it is over stays readable. Outlined in dark on both
+   sides so it holds against snow and open sea alike. */
+.crosshair {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 1;
+  width: 26px;
+  height: 26px;
+  margin: -13px 0 0 -13px;
+  border: 1.5px solid rgba(255, 255, 255, 0.92);
+  border-radius: 50%;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.55),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.55);
+  pointer-events: none;
+}
+
+.crosshair::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 4px;
+  height: 4px;
+  margin: -2px 0 0 -2px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6);
 }
 
 /* CesiumJS is Apache-2.0, so its logo is optional and we drop it. The text

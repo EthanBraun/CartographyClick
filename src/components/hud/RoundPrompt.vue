@@ -64,4 +64,17 @@ defineProps({
   font-style: italic;
   color: #7b8a8a;
 }
+
+/* The pool has names 26 characters long; at 34px one of those is wider than
+   a phone. This size puts the longest on two lines and most on one. */
+@media (max-width: 640px) {
+  .city {
+    font-size: 24px;
+    line-height: 1.2;
+  }
+
+  .country {
+    font-size: 13px;
+  }
+}
 </style>

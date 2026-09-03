@@ -10,6 +10,7 @@ import PickerPanel from './components/hud/PickerPanel.vue'
 import RoundPrompt from './components/hud/RoundPrompt.vue'
 import RoundResult from './components/hud/RoundResult.vue'
 import Tally from './components/hud/Tally.vue'
+import TouchBar from './components/hud/TouchBar.vue'
 import './components/hud/hud.css'
 import {pickRound} from './game/cities'
 import {cityCount, loadCountryIndex, studyRun} from './game/study'
@@ -67,6 +68,21 @@ const round = ref(0)
 // moves for both.
 const game = ref(0)
 
+// Whether the main pointer is a finger: a phone or a tablet. Two things
+// follow. The globe aims with a crosshair instead of a cursor, and the key
+// hints give way to buttons -- the keys themselves keep working, for a tablet
+// with a keyboard on it. Read from the same media query the stylesheets use,
+// so what is drawn and what is wired never disagree, and watched, since
+// plugging a mouse into a tablet flips it.
+const coarsePointer = window.matchMedia('(pointer: coarse)')
+const touch = ref(coarsePointer.matches)
+const onPointerChange = (event) => {
+  touch.value = event.matches
+}
+// The globe, for the one thing a button has to reach into it for: the commit
+// that F makes.
+const globe = ref(null)
+
 const cities = computed(() => run.value.cities)
 const city = computed(() => cities.value[run.value.index] ?? null)
 const result = computed(() => run.value.result)
@@ -117,6 +133,13 @@ const chips = computed(() =>
 )
 const selectedCities = computed(() =>
   chips.value.reduce((sum, chip) => sum + chip.count, 0),
+)
+// Whether the country under the aim is already in the selection, so the touch
+// button can say which way its toggle goes.
+const hoveredPicked = computed(
+  () =>
+    hovered.value !== null &&
+    selection.value.some((country) => country.code === hovered.value.code),
 )
 
 function onGuess(guess) {
@@ -275,13 +298,20 @@ function onSummaryKey(event) {
   }
 }
 
-onMounted(() => window.addEventListener('keydown', onKeyDown))
-onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown))
+onMounted(() => {
+  window.addEventListener('keydown', onKeyDown)
+  coarsePointer.addEventListener('change', onPointerChange)
+})
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', onKeyDown)
+  coarsePointer.removeEventListener('change', onPointerChange)
+})
 </script>
 
 <template>
   <div class="app">
     <Globe
+      ref="globe"
       :accuracy="accuracy"
       :game="game"
       :over="run.over"
@@ -290,6 +320,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown))
       :selected="selection.map((country) => country.code)"
       :selecting="selecting"
       :target="city"
+      :touch="touch"
       @guess="onGuess"
       @hover="onHover"
       @toggle="onToggle"
@@ -315,8 +346,16 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown))
 
       <Tally v-if="!selecting" :max-score="maxScore" :total="total" />
 
-      <AimHint v-if="selecting || !revealed" :city="city" :selecting="selecting" />
-      <RoundResult v-else-if="!run.over" :multiplier="multiplier" :result="result" />
+      <!-- The aim hint is the one panel that is nothing but key hints, so on
+           touch it goes altogether: the crosshair says where, the bar says
+           what. The other panels keep their content and drop only their hint
+           line, which hud.css does. -->
+      <AimHint v-if="!touch && (selecting || !revealed)" :city="city" :selecting="selecting" />
+      <RoundResult
+        v-else-if="revealed && !run.over && !selecting"
+        :multiplier="multiplier"
+        :result="result"
+      />
 
       <FinalSummary
         v-if="run.over && !selecting"
@@ -326,6 +365,28 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown))
         :scored="run.scored"
         :studying="studying"
         :total="total"
+      />
+
+      <!-- Every handler here is one the keys already call; see onKeyDown and
+           the two dispatchers under it for which key does which. -->
+      <TouchBar
+        v-if="touch"
+        :chips="chips.length"
+        :hovered="hovered"
+        :hovered-count="hoveredCount"
+        :over="run.over"
+        :picked="hoveredPicked"
+        :revealed="revealed"
+        :selected-cities="selectedCities"
+        :selecting="selecting"
+        :studying="studying"
+        @advance="advance"
+        @back="resumeGame"
+        @clear="clearSelection"
+        @commit="globe?.commit()"
+        @restart="restart"
+        @select="enterSelect"
+        @study="startStudy"
       />
     </div>
   </div>

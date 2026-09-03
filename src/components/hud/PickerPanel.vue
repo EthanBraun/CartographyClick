@@ -110,4 +110,21 @@ defineProps({
   font-style: italic;
   color: #7b8a8a;
 }
+
+/* On a phone the prompt slot is already a strip pinned to both edges, so the
+   width above would fight it; and the strip reads left-aligned, so the chips
+   line up with the text over them rather than centering under it. */
+@media (max-width: 640px) {
+  .picker {
+    width: auto;
+  }
+
+  .hovered {
+    font-size: 19px;
+  }
+
+  .chips {
+    justify-content: flex-start;
+  }
+}
 </style>

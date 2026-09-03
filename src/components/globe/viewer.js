@@ -59,6 +59,15 @@ export function createViewer(container) {
   controller.maximumZoomDistance = MAX_ZOOM_DISTANCE
   controller.enableTilt = true
   controller.enableLook = false
+  // A pinch is a zoom and nothing else. Cesium also reads a two-finger gesture
+  // as a tilt, and the twist in it as a turn of the heading, which is how a
+  // phone ends up with north pointing anywhere -- and no way of getting it
+  // back, since the drag that puts it right on a desktop is the same gesture.
+  // Fingers on a pinch are never quite parallel, so it happened on every
+  // zoom. The mouse keeps its tilt inputs; this only takes the pinch out.
+  controller.tiltEventTypes = controller.tiltEventTypes.filter(
+    (type) => type !== Cesium.CameraEventType.PINCH,
+  )
 
   camera.setView({
     destination: Cesium.Cartesian3.fromDegrees(HOME_LON, HOME_LAT, HOME_HEIGHT),

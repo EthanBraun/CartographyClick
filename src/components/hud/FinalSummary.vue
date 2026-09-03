@@ -134,4 +134,37 @@ defineProps({
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
+
+/* On a phone the card takes the width, and its height is what is left between
+   the prompt strip above and the buttons below. Even a game's five rows can
+   run past that in landscape, so every card scrolls here, not just a study
+   run's, which is why it takes the pointer on a phone regardless. Both
+   selectors, or the study run's own cap above would outrank this one. The
+   breakdown's columns close up to fit four of them in 350px. */
+@media (max-width: 640px) {
+  .final,
+  .final.long {
+    width: calc(100vw - 24px);
+    min-width: 0;
+    max-height: calc(100vh - 200px);
+    max-height: calc(100dvh - 200px);
+    padding: 16px 14px;
+    overflow-y: auto;
+    pointer-events: auto;
+    touch-action: pan-y;
+  }
+
+  .final-score {
+    font-size: 40px;
+  }
+
+  .breakdown {
+    font-size: 13px;
+  }
+
+  .breakdown li {
+    grid-template-columns: 1fr auto auto 44px;
+    gap: 8px;
+  }
+}
 </style>

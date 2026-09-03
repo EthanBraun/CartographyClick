@@ -12,4 +12,9 @@ body {
 
 #app {
     height: 100vh;
+    /* A phone browser's 100vh is the height with its toolbar hidden, which
+       puts the bottom of the page under the toolbar whenever it is showing.
+       dvh is the height that is actually visible; the same as vh on a
+       desktop, and the line above stands in for it where it is unknown. */
+    height: 100dvh;
 }

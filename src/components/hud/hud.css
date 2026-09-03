@@ -68,3 +68,43 @@ kbd {
   font-size: 12px;
   color: #8a9;
 }
+
+/* A finger for a pointer: the buttons along the bottom say what a tap can
+   do, so the lines that name keys go, and the footer above them moves up out
+   of their way. The keys themselves still work. */
+@media (pointer: coarse) {
+  .hint {
+    display: none;
+  }
+
+  .footer {
+    bottom: calc(80px + env(safe-area-inset-bottom));
+  }
+}
+
+/* A phone's width. The desktop layout floats three things along the top --
+   the ask in the middle, the score in the corner, the scale bar opposite --
+   and in 375px they land on each other. The top panel becomes one strip
+   across the screen with the score tucked into its corner, and the type comes
+   down a size so a long name still fits on a line or two. Widths only: a
+   narrow window on a desktop gets the same, which is what it needs too. */
+@media (max-width: 640px) {
+  .panel {
+    padding: 10px 14px;
+  }
+
+  .prompt {
+    top: 12px;
+    right: 12px;
+    left: 12px;
+    transform: none;
+    text-align: left;
+  }
+
+  /* Room on the right of the first line for the running total, which Tally
+     positions over the strip's corner. The two agree on this by number:
+     see .tally in Tally.vue. */
+  .meta {
+    padding-right: 96px;
+  }
+}

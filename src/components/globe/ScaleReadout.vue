@@ -152,4 +152,11 @@ onBeforeUnmount(detach)
   margin-top: 4px;
   color: #9ad;
 }
+
+/* The corner it sits in is the prompt strip's on a phone. */
+@media (max-width: 640px) {
+  .scale {
+    display: none;
+  }
+}
 </style>
