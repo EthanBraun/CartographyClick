@@ -9,7 +9,6 @@ import {loadBorders, outlineFor} from '../game/borders'
 import {
   applyMinimumZoom,
   captureView,
-  easeZoom,
   flyToReveal,
   flyToSelect,
   liftForNextRound,
@@ -19,6 +18,7 @@ import {
 import {createMarkers} from './globe/markers'
 import ScaleReadout from './globe/ScaleReadout.vue'
 import {createSelectMode} from './globe/selectMode'
+import {attachTouch} from './globe/touch'
 import {createViewer} from './globe/viewer'
 
 // Dragging already means "rotate the globe", so the guess is committed with a
@@ -323,7 +323,7 @@ onMounted(() => {
   detach = [
     () => window.removeEventListener('keydown', onKeyDown),
     () => window.removeEventListener('resize', onResize),
-    easeZoom(viewer),
+    attachTouch(viewer),
     scene.postRender.addEventListener(() => select.update(aim())),
   ]
   readout.value.attach(viewer, () => markers.guess)

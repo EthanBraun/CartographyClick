@@ -114,39 +114,11 @@ function zoomDistanceForScale(viewer, km) {
   return (mpp * height) / (2 * Math.tan(fovy / 2))
 }
 
-// Keep the zoom step eased for as long as the viewer lives. Runs until the
-// returned function is called.
-//
-// Which input is easing the zoom is whichever was used last: a wheel until a
-// finger lands, a finger until the wheel turns. Not a device check, because a
-// laptop with a touchscreen is both, and not a flag dropped on touch-end,
-// because the flick a finger leaves behind is replayed through the same cap
-// for a second or so and would stop dead the moment the cap came back.
-export function easeZoom(viewer) {
-  const {scene} = viewer
-  const {canvas} = scene
-  let touching = false
-  const onPointerDown = (event) => {
-    touching = event.pointerType !== 'mouse'
-  }
-  const onWheel = () => {
-    touching = false
-  }
-  canvas.addEventListener('pointerdown', onPointerDown, {passive: true})
-  canvas.addEventListener('wheel', onWheel, {passive: true})
-  const removeTick = scene.postRender.addEventListener(() =>
-    updateZoomStep(viewer, touching),
-  )
-  return () => {
-    removeTick()
-    canvas.removeEventListener('pointerdown', onPointerDown)
-    canvas.removeEventListener('wheel', onWheel)
-  }
-}
-
 // Ease the per-notch zoom step as altitude climbs, interpolated in log space
-// so it tracks how zoom actually feels rather than raw meters.
-function updateZoomStep(viewer, touching) {
+// so it tracks how zoom actually feels rather than raw meters. `touching` is
+// whether a finger rather than a wheel is the input right now -- touch.js
+// keeps track and calls this every frame.
+export function updateZoomStep(viewer, touching) {
   if (!viewer || viewer.isDestroyed()) return
   const controller = viewer.scene.screenSpaceCameraController
   if (touching) {
@@ -223,7 +195,8 @@ function liftTo(viewer, height, duration) {
 // instead of fighting. Height is the one thing set outright, so the lift
 // lands exactly where every round opens. That also means a wheel would be
 // undone every frame, so the wheel ends the lift instead: a player zooming is
-// taking the camera, and gets it.
+// taking the camera, and gets it. A second finger is the same thing said on a
+// touchscreen -- a pinch starting -- and ends it the same way.
 export function liftForNextRound(viewer) {
   const {scene, camera} = viewer
   const {canvas} = scene
@@ -280,8 +253,14 @@ export function liftForNextRound(viewer) {
   const stop = () => {
     removeTick()
     canvas.removeEventListener('wheel', stop)
+    canvas.removeEventListener('pointerdown', onPointerDown)
+  }
+  // The first finger down is primary; the one that makes it a pinch is not.
+  const onPointerDown = (event) => {
+    if (event.pointerType === 'touch' && !event.isPrimary) stop()
   }
   canvas.addEventListener('wheel', stop, {passive: true})
+  canvas.addEventListener('pointerdown', onPointerDown, {passive: true})
   return stop
 }
 
