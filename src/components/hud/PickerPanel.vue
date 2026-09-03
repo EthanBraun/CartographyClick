@@ -86,7 +86,7 @@ defineProps({
 
 /* Gold to match the outline a selected country is drawn in on the globe: the
    chip and the border are the same fact, and picking one up should be enough
-   to recognise the other. */
+   to recognize the other. */
 .chip {
   display: inline-flex;
   align-items: baseline;

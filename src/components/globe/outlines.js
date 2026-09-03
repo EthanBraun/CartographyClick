@@ -1,6 +1,6 @@
 // Borders as Cesium primitives: a country or subdivision outline is a handful
 // of batched polyline primitives that fill in over a few frames, and can be
-// recoloured, hidden and torn down as a unit.
+// recolored, hidden and torn down as a unit.
 
 import * as Cesium from 'cesium'
 
@@ -10,7 +10,7 @@ import * as Cesium from 'cesium'
 export const UNCLAMPED_HEIGHT = 4000
 
 // An outline arrives a few rings at a time (see addOutline). The first chunk is
-// a single ring because that one ring is most of what there is to recognise,
+// a single ring because that one ring is most of what there is to recognize,
 // and later chunks grow by this factor so the number of batches stays
 // logarithmic in the ring count -- six for Canada's 412, not 412.
 const OUTLINE_FIRST_CHUNK = 1
@@ -32,15 +32,15 @@ const OUTLINE_CHUNK_GROWTH = 4
 // instant draw, slow enough and it reads as a deliberate sweep. Either beats a
 // stall. It does mean the last islet lands later than one batch would have
 // managed -- that is the trade, and it buys the first ring landing far sooner.
-export function addOutline(viewer, rings, colour, width) {
+export function addOutline(viewer, rings, color, width) {
   const clamped = Cesium.GroundPolylinePrimitive.isSupported(viewer.scene)
   // Vertex count stands in for how much of the outline a ring accounts for.
   const ordered = [...rings].sort((a, b) => b.length - a.length)
-  // Colour and visibility live on the outline, not only in the primitives it
+  // Color and visibility live on the outline, not only in the primitives it
   // has built so far: an outline is still filling long after it is first
   // painted, and a chunk built at that point has to come out matching what is
   // already on screen rather than the arguments this was called with.
-  const outline = {primitives: [], stop: null, colour, show: true}
+  const outline = {primitives: [], stop: null, color, show: true}
 
   let drawn = 0
   let size = OUTLINE_FIRST_CHUNK
@@ -51,7 +51,7 @@ export function addOutline(viewer, rings, colour, width) {
     size *= OUTLINE_CHUNK_GROWTH
 
     const primitive = viewer.scene.primitives.add(
-      buildOutline(chunk, outline.colour, width, clamped),
+      buildOutline(chunk, outline.color, width, clamped),
     )
     primitive.show = outline.show
     outline.primitives.push(primitive)
@@ -71,9 +71,9 @@ export function addOutline(viewer, rings, colour, width) {
 }
 
 // One chunk of rings, as a primitive that has not been added to the scene yet.
-function buildOutline(rings, colour, width, clamped) {
+function buildOutline(rings, color, width, clamped) {
   const appearance = new Cesium.PolylineMaterialAppearance({
-    material: Cesium.Material.fromType('Color', {color: colour}),
+    material: Cesium.Material.fromType('Color', {color}),
   })
 
   const geometryInstances = rings.map(
@@ -115,14 +115,14 @@ export function stopFilling(outline) {
   outline.stop = null
 }
 
-// Repaint an outline where it stands. Cesium holds an appearance's colour as a
+// Repaint an outline where it stands. Cesium holds an appearance's color as a
 // shader uniform, so this is one uniform write per primitive rather than a
 // rebuild -- which is what makes sweeping the cursor across a continent cheap.
-export function setOutlineColour(outline, colour) {
-  if (outline.colour === colour) return
-  outline.colour = colour
+export function setOutlineColor(outline, color) {
+  if (outline.color === color) return
+  outline.color = color
   for (const primitive of outline.primitives) {
-    primitive.appearance.material.uniforms.color = colour
+    primitive.appearance.material.uniforms.color = color
   }
 }
 

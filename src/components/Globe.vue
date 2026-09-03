@@ -32,7 +32,7 @@ const props = defineProps({
   // Changes for every new city. Watched instead of `target` because two games
   // back to back can draw the same city, and an identity check would miss it.
   round: {type: Number, default: 0},
-  // 1 = dead on, 0 = as wrong as it gets; colours the guess pin.
+  // 1 = dead on, 0 = as wrong as it gets; colors the guess pin.
   accuracy: {type: Number, default: 1},
   // Bumped only when a new game starts. `round` moves for every city, so on
   // its own it cannot tell "next city" from "start over" -- and the two want

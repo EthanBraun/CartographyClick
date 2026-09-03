@@ -2,7 +2,7 @@
 // line drawn between them on a reveal.
 
 import * as Cesium from 'cesium'
-import {METERS_PER_KM, metresPerPixel} from './camera'
+import {METERS_PER_KM, metersPerPixel} from './camera'
 import {UNCLAMPED_HEIGHT} from './outlines'
 import {HOME_HEIGHT} from './viewer'
 
@@ -35,17 +35,17 @@ const RAMP_LIGHTNESS = 0.41
 
 // The answer pin has to read as "the city was here", never as a score, so it
 // sits off the accuracy ramp entirely — cyan is nowhere on a green-to-red run.
-export const TARGET_COLOUR = Cesium.Color.fromHsl(189 / 360, 0.82, 0.52, PIN_OPACITY)
+export const TARGET_COLOR = Cesium.Color.fromHsl(189 / 360, 0.82, 0.52, PIN_OPACITY)
 
 // Geodesic tie-line from the guess to the answer, so a miss reads as a
 // direction rather than just a number.
 const LINK_WIDTH = 2
 const LINK_DASH = 14
-const LINK_COLOUR = Cesium.Color.WHITE.withAlpha(0.75)
+const LINK_COLOR = Cesium.Color.WHITE.withAlpha(0.75)
 
 // 1 = dead on, 0 = as wrong as it gets. Interpolating the hue rather than RGB
 // runs green -> yellow -> red, where a straight RGB lerp would sag through mud.
-export function accuracyColour(accuracy) {
+export function accuracyColor(accuracy) {
   const t = Cesium.Math.clamp(accuracy, 0, 1)
   const hue = HUE_WORST + (HUE_PERFECT - HUE_WORST) * t
   return Cesium.Color.fromHsl(
@@ -61,12 +61,12 @@ export function accuracyColour(accuracy) {
 export function pinRadius(viewer, position) {
   const distance = Cesium.Cartesian3.distance(viewer.camera.positionWC, position)
   const growth = Math.min(distance, PIN_GROWTH_CEILING)
-  return Math.max(PIN_RADIUS, PIN_MIN_RADIUS_PX * metresPerPixel(viewer, growth))
+  return Math.max(PIN_RADIUS, PIN_MIN_RADIUS_PX * metersPerPixel(viewer, growth))
 }
 
-// `siteFn` returns {longitude, latitude} in radians; `colourFn` returns a Color.
-// Both are read every frame, so a pin can move and recolour after scoring.
-export function addPin(viewer, siteFn, colourFn) {
+// `siteFn` returns {longitude, latitude} in radians; `colorFn` returns a Color.
+// Both are read every frame, so a pin can move and recolor after scoring.
+export function addPin(viewer, siteFn, colorFn) {
   const surface = new Cesium.Cartesian3()
   const radiusAt = () => {
     const site = siteFn()
@@ -92,7 +92,7 @@ export function addPin(viewer, siteFn, colourFn) {
       topRadius: new Cesium.CallbackProperty(radiusAt, false),
       bottomRadius: new Cesium.CallbackProperty(radiusAt, false),
       material: new Cesium.ColorMaterialProperty(
-        new Cesium.CallbackProperty(colourFn, false),
+        new Cesium.CallbackProperty(colorFn, false),
       ),
     },
   })
@@ -114,7 +114,7 @@ export function addLink(viewer, from, to) {
       clampToGround: clamped,
       width: LINK_WIDTH,
       material: new Cesium.PolylineDashMaterialProperty({
-        color: LINK_COLOUR,
+        color: LINK_COLOR,
         dashLength: LINK_DASH,
       }),
     },

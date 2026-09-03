@@ -16,7 +16,7 @@ permissions:
   pages: write
   id-token: write
 
-# One deploy at a time, and let an in-flight one finish rather than cancelling
+# One deploy at a time, and let an in-flight one finish rather than canceling
 # it, so the live site never ends up half-published.
 concurrency:
   group: pages

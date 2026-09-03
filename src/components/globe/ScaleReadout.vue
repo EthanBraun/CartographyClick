@@ -5,7 +5,7 @@
 // one thing outside this file that exists for it.
 import {onBeforeUnmount, ref} from 'vue'
 import * as Cesium from 'cesium'
-import {METERS_PER_KM, SCALE_TARGET_PX, metresPerPixel} from './camera'
+import {METERS_PER_KM, SCALE_TARGET_PX, metersPerPixel} from './camera'
 import {PIN_ASPECT, pinRadius} from './pins'
 // The same formatter the round result uses, so the bar and the miss it is
 // read against agree on unit and precision.
@@ -59,12 +59,12 @@ function update() {
   if (!viewer || viewer.isDestroyed()) return
   const canvas = viewer.scene.canvas
 
-  // Sample at screen centre so the bar describes the ground you're looking at.
-  const centre = new Cesium.Cartesian2(
+  // Sample at screen center so the bar describes the ground you're looking at.
+  const center = new Cesium.Cartesian2(
     canvas.clientWidth / 2,
     canvas.clientHeight / 2,
   )
-  const ray = viewer.camera.getPickRay(centre)
+  const ray = viewer.camera.getPickRay(center)
   const ground = ray ? viewer.scene.globe.pick(ray, viewer.scene) : undefined
   // Off-globe (looking at space): fall back to altitude so the bar still reads.
   const distance = Cesium.defined(ground)
@@ -78,7 +78,7 @@ function update() {
   const minZoom = formatKm(floor / METERS_PER_KM)
   if (minZoom !== minZoomLabel.value) minZoomLabel.value = minZoom
 
-  const mpp = metresPerPixel(viewer, distance)
+  const mpp = metersPerPixel(viewer, distance)
   const spanKm = (SCALE_TARGET_PX * mpp) / METERS_PER_KM
   const nice = [...NICE_KM].reverse().find((k) => k <= spanKm) ?? NICE_KM[0]
 

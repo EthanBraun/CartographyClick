@@ -52,7 +52,7 @@ const REVEAL_HEADING = 0
 const CESIUM_ZOOM_FACTOR = 5          // matches Cesium's internal constant
 const ZOOM_STEP_NEAR = 0.07           // fraction of remaining altitude, close in
 const ZOOM_STEP_FAR = 0.02            // ... at full zoom-out
-const ZOOM_DAMP_FROM = 3_000_000      // metres; below this, no extra easing
+const ZOOM_DAMP_FROM = 3_000_000      // meters; below this, no extra easing
 
 // Closest zoom is defined as "the scale bar's width covers 8 km". Solved at runtime
 // from the live canvas size and vertical FOV rather than baked in, since both
@@ -60,12 +60,12 @@ const ZOOM_DAMP_FROM = 3_000_000      // metres; below this, no extra easing
 const MIN_ZOOM_SCALE_KM = 8
 // The width ScaleReadout draws its bar at. It lives here rather than with the
 // readout because the zoom floor above is solved against it and the two have
-// to agree. When the readout goes, bake the metre value applyMinimumZoom
+// to agree. When the readout goes, bake the meter value applyMinimumZoom
 // arrives at into a constant and drop this with it.
 export const SCALE_TARGET_PX = 170
 
-// Metres of world per screen pixel at a given distance from the camera.
-export function metresPerPixel(viewer, distance) {
+// Meters of world per screen pixel at a given distance from the camera.
+export function metersPerPixel(viewer, distance) {
   const fovy = viewer.camera.frustum.fovy ?? Cesium.Math.PI_OVER_THREE
   const height = viewer.scene.canvas.clientHeight || 1
   return (2 * distance * Math.tan(fovy / 2)) / height
@@ -81,7 +81,7 @@ function zoomDistanceForScale(viewer, km) {
 }
 
 // Ease the per-notch zoom step as altitude climbs, interpolated in log space
-// so it tracks how zoom actually feels rather than raw metres.
+// so it tracks how zoom actually feels rather than raw meters.
 export function updateZoomStep(viewer) {
   if (!viewer || viewer.isDestroyed()) return
   const controller = viewer.scene.screenSpaceCameraController
@@ -103,15 +103,15 @@ export function applyMinimumZoom(viewer) {
 
 // What the camera is aimed at, which after a reveal is not the same as what it
 // is standing over — the reveal tilts it, so the two are a good fraction of the
-// viewing distance apart. Undefined when the centre of the screen is off the
+// viewing distance apart. Undefined when the center of the screen is off the
 // globe entirely, i.e. looking past the limb into space.
 export function lookAtCartographic(viewer) {
   const canvas = viewer.scene.canvas
-  const centre = new Cesium.Cartesian2(
+  const center = new Cesium.Cartesian2(
     canvas.clientWidth / 2,
     canvas.clientHeight / 2,
   )
-  const ray = viewer.camera.getPickRay(centre)
+  const ray = viewer.camera.getPickRay(center)
   const ground = ray ? viewer.scene.globe.pick(ray, viewer.scene) : undefined
   return Cesium.defined(ground)
     ? Cesium.Cartographic.fromCartesian(ground)
@@ -119,7 +119,7 @@ export function lookAtCartographic(viewer) {
 }
 
 // Straight up to `height` and level, holding the ground the camera is aimed at
-// under the centre of the screen.
+// under the center of the screen.
 function liftTo(viewer, height, duration) {
   // Aiming at space is rare but possible; standing still beats snapping to an
   // arbitrary point, so fall back to whatever the camera is above.
@@ -139,7 +139,7 @@ function liftTo(viewer, height, duration) {
 }
 
 // Pull up and level out for the next city, holding the ground the reveal left
-// under the centre of the screen.
+// under the center of the screen.
 export function liftForNextRound(viewer) {
   liftTo(viewer, NEXT_ROUND_HEIGHT, NEXT_ROUND_FLIGHT_SECONDS)
 }

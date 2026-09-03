@@ -26,12 +26,12 @@
 //   30-million Chongqing is a 3 and a 130-thousand Reykjavik a 1.
 //
 //   It carries no country. The live game derives one from polygons at runtime,
-//   which is why 40-odd entries here were labelled by continent and read as
+//   which is why 40-odd entries here were labeled by continent and read as
 //   "Bogota, South America". Countries are resolved from MapTap's own
 //   countries.geojson, with microstates named directly since those outlines are
 //   too coarse to separate Monaco from France.
 //
-// Every country contributes its two most recognisable places at minimum, and
+// Every country contributes its two most recognizable places at minimum, and
 // well-known ones up to fourteen, so no round fills with towns from whichever
 // country the source happened to over-collect. The tiers are unequal in size
 // because the ratings are absolute, not quantiles: there are only so many
@@ -533,7 +533,7 @@ const TIERS = [
     {name: 'Chefchaouen', region: 'Morocco', lat: 35.1688, lon: -5.2636},
     {name: 'Banjul', region: 'The Gambia', lat: 13.4549, lon: -16.579},
     {name: 'Bulawayo', region: 'Zimbabwe', lat: -20.1325, lon: 28.6268},
-    {name: 'Hargeisa', region: 'Somalia', note: 'de facto independent; recognised as part of Somalia', lat: 9.56, lon: 44.065},
+    {name: 'Hargeisa', region: 'Somalia', note: 'de facto independent; recognized as part of Somalia', lat: 9.56, lon: 44.065},
     {name: 'Tartu', region: 'Estonia', lat: 58.378, lon: 26.729},
     {name: 'Mbabane', region: 'Eswatini', lat: -26.3054, lon: 31.1367},
     {name: 'Jayapura', region: 'Papua, Indonesia', lat: -2.5916, lon: 140.669},
@@ -729,7 +729,7 @@ function tooClose(place, chosen) {
   })
 }
 
-// One place per round, most recognisable first, skipping whatever came up
+// One place per round, most recognizable first, skipping whatever came up
 // recently and anything that would land on a spot this game already uses.
 export function pickRound() {
   const chosen = []

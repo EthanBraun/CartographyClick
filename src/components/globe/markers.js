@@ -5,14 +5,14 @@
 
 import * as Cesium from 'cesium'
 import {addOutline, destroyOutline, setOutlineShown, stopFilling} from './outlines'
-import {TARGET_COLOUR, accuracyColour, addLink, addPin} from './pins'
+import {TARGET_COLOR, accuracyColor, addLink, addPin} from './pins'
 
 // Revealing also outlines where the answer was: the country in blue, and --
 // where the card names one, so the line has something to match -- the state,
 // province or prefecture inside it in yellow. Both are off the accuracy ramp
 // and off the answer pin's cyan, so an outline never reads as a score.
-const COUNTRY_BORDER_COLOUR = Cesium.Color.fromHsl(217 / 360, 0.9, 0.58, 0.95)
-const REGION_BORDER_COLOUR = Cesium.Color.fromHsl(48 / 360, 0.95, 0.55, 0.95)
+const COUNTRY_BORDER_COLOR = Cesium.Color.fromHsl(217 / 360, 0.9, 0.58, 0.95)
+const REGION_BORDER_COLOR = Cesium.Color.fromHsl(48 / 360, 0.95, 0.55, 0.95)
 // The subdivision sits inside the country and shares its coast, so it goes on
 // thinner and on top: where the two lines coincide, the more specific one wins.
 const COUNTRY_BORDER_WIDTH = 3
@@ -30,10 +30,10 @@ export function createMarkers(viewer, accuracy) {
   // globe accumulates the game as it goes, and the summary at the end has all
   // five guesses and answers standing on it.
   let history = []
-  // The guess pin's colour, fixed at the moment the answer landed. `accuracy`
+  // The guess pin's color, fixed at the moment the answer landed. `accuracy`
   // is back to its 1 default by the time the round is cleared, so reading it
   // then would retire every guess as a perfect one.
-  let settledColour = null
+  let settledColor = null
   // Guess site, in radians.
   let guess = null
 
@@ -41,7 +41,7 @@ export function createMarkers(viewer, accuracy) {
   // every frame, so a second drop walks it rather than stacking another.
   function drop(site) {
     guess = site
-    if (!pin) pin = addPin(viewer, () => guess, () => accuracyColour(accuracy()))
+    if (!pin) pin = addPin(viewer, () => guess, () => accuracyColor(accuracy()))
   }
 
   // Put the answer on the globe: a pin on the real city, plus a geodesic back
@@ -55,8 +55,8 @@ export function createMarkers(viewer, accuracy) {
       longitude: Cesium.Math.toRadians(target.lon),
       latitude: Cesium.Math.toRadians(target.lat),
     }
-    targetPin = addPin(viewer, () => site, () => TARGET_COLOUR)
-    settledColour = accuracyColour(accuracy())
+    targetPin = addPin(viewer, () => site, () => TARGET_COLOR)
+    settledColor = accuracyColor(accuracy())
     if (!guess) return null
 
     link = addLink(viewer, guess, site)
@@ -70,23 +70,23 @@ export function createMarkers(viewer, accuracy) {
     countryOutline = addOutline(
       viewer,
       country.rings,
-      COUNTRY_BORDER_COLOUR,
+      COUNTRY_BORDER_COLOR,
       COUNTRY_BORDER_WIDTH,
     )
     if (region) {
       regionOutline = addOutline(
         viewer,
         region.rings,
-        REGION_BORDER_COLOUR,
+        REGION_BORDER_COLOR,
         REGION_BORDER_WIDTH,
       )
     }
   }
 
   // Hand this round's markers to the history. The guess pin has to be rebuilt:
-  // its site and colour are callbacks reading `guess` and `accuracy` every
+  // its site and color are callbacks reading `guess` and `accuracy` every
   // frame, so left as it is it would walk to the next round's pin drop and
-  // take that round's score for its colour. The answer pin and the link are
+  // take that round's score for its color. The answer pin and the link are
   // already fixed and carry over untouched.
   //
   // The link goes with them on purpose. Five guesses and five answers scattered
@@ -95,9 +95,9 @@ export function createMarkers(viewer, accuracy) {
   function retire() {
     if (pin) {
       const site = guess
-      const colour = settledColour ?? accuracyColour(accuracy())
+      const color = settledColor ?? accuracyColor(accuracy())
       viewer.entities.remove(pin)
-      history.push(addPin(viewer, () => site, () => colour))
+      history.push(addPin(viewer, () => site, () => color))
     }
     if (targetPin) history.push(targetPin)
     if (link) history.push(link)
@@ -105,7 +105,7 @@ export function createMarkers(viewer, accuracy) {
     targetPin = null
     link = null
     guess = null
-    settledColour = null
+    settledColor = null
   }
 
   // A new game: the round that just finished is thrown away with the rest of
@@ -119,7 +119,7 @@ export function createMarkers(viewer, accuracy) {
     link = null
     history = []
     guess = null
-    settledColour = null
+    settledColor = null
   }
 
   // The outlines go on every round change, and deliberately: a border left

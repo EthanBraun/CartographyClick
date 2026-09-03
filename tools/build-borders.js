@@ -15,7 +15,7 @@
 //   Natural Earth carries about 130 fields per feature, nearly all of them
 //   language variants and rendering hints.
 //
-//   Coordinates are quantised to 1e-4 degrees (~11 m) and Douglas-Peucker'd at
+//   Coordinates are quantized to 1e-4 degrees (~11 m) and Douglas-Peucker'd at
 //   SIMPLIFY_DEG. That tolerance is set against how close the reveal camera
 //   ever gets: it frames a sphere of at least REVEAL_MIN_RADIUS, which works
 //   out around 200 m per screen pixel, so a 550 m deviation is under 3 px in
@@ -43,7 +43,7 @@ const OUT_DIR = path.join(__dirname, '..', 'public', 'borders')
 const CACHE_DIR = path.join(__dirname, '.cache')
 
 // 1e-4 degrees, ~11 m at the equator. Well under the source's own accuracy, so
-// quantising costs nothing and shortens every delta.
+// quantizing costs nothing and shortens every delta.
 const PRECISION = 1e4
 // Douglas-Peucker tolerance, in degrees. ~550 m.
 const SIMPLIFY_DEG = 0.005
@@ -115,7 +115,7 @@ function simplify(points, tolerance) {
   return points.filter((_, i) => keep[i])
 }
 
-// Quantise, drop points the grid has collapsed onto their neighbour, then
+// Quantize, drop points the grid has collapsed onto their neighbor, then
 // simplify. Collapsing first matters: Cesium rejects a polyline with repeated
 // consecutive positions, and rounding is what creates them.
 function prepareRing(ring) {

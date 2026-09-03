@@ -10,7 +10,7 @@ import {countryAt, countryRings} from '../../game/borders'
 import {
   addOutline,
   destroyOutline,
-  setOutlineColour,
+  setOutlineColor,
   setOutlineShown,
   stopFilling,
 } from './outlines'
@@ -21,8 +21,8 @@ import {
 // because it has to keep reading while the cursor is somewhere else entirely.
 // Both sit off the reveal's blue -- a border you picked must never be mistaken
 // for a border that was an answer.
-const HOVER_BORDER_COLOUR = Cesium.Color.WHITE.withAlpha(0.95)
-const SELECTED_BORDER_COLOUR = Cesium.Color.fromHsl(43 / 360, 0.95, 0.58, 0.95)
+const HOVER_BORDER_COLOR = Cesium.Color.WHITE.withAlpha(0.95)
+const SELECTED_BORDER_COLOR = Cesium.Color.fromHsl(43 / 360, 0.95, 0.58, 0.95)
 const SELECT_BORDER_WIDTH = 3
 
 // Outlines are kept once built rather than dropped when the cursor leaves:
@@ -104,9 +104,9 @@ export function createSelectMode(viewer, {selecting, selected, onHover}) {
       // Selected beats hovered: pointing at a country already picked must not
       // make it look unpicked.
       if (lit) {
-        setOutlineColour(
+        setOutlineColor(
           outline,
-          picked.has(code) ? SELECTED_BORDER_COLOUR : HOVER_BORDER_COLOUR,
+          picked.has(code) ? SELECTED_BORDER_COLOR : HOVER_BORDER_COLOR,
         )
       }
     }
@@ -126,7 +126,7 @@ export function createSelectMode(viewer, {selecting, selected, onHover}) {
 
     const rings = countryRings(code)
     if (!rings) return null
-    const outline = addOutline(viewer, rings, HOVER_BORDER_COLOUR, SELECT_BORDER_WIDTH)
+    const outline = addOutline(viewer, rings, HOVER_BORDER_COLOR, SELECT_BORDER_WIDTH)
     outlines.set(code, outline)
     return outline
   }

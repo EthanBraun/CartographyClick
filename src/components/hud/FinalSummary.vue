@@ -1,5 +1,5 @@
 <script setup>
-// The centre panel once a run is over: the score, every round under it, and
+// The center panel once a run is over: the score, every round under it, and
 // what to do next.
 import {formatKm} from './format'
 

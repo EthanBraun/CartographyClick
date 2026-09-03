@@ -13,17 +13,17 @@
 const PRECISION = 1e4
 
 // Roughly, at the equator. Only used to put the fallback below in units that
-// mean something; the error it forgives is a coastline generalisation, not a
+// mean something; the error it forgives is a coastline generalization, not a
 // measurement.
 const KM_PER_DEGREE = 111.32
 
-// Coordinates are the city's; the outline is a 1:10m generalisation of a
+// Coordinates are the city's; the outline is a 1:10m generalization of a
 // coastline. Those disagree, and they disagree most for exactly the places
 // this game likes: Miami, Venice, Copenhagen and Nuuk all sit in open water on
 // a 1:10m map. So a point no polygon contains is given to the nearest border
 // within this distance rather than dropped.
 //
-// Wide enough for a generalised coastline (the worst in the pool is a few km),
+// Wide enough for a generalized coastline (the worst in the pool is a few km),
 // narrow enough that a genuinely mid-ocean point still resolves to nothing.
 const OFFSHORE_LIMIT_KM = 75
 
@@ -72,7 +72,7 @@ async function fetchBorders() {
 //
 // Answered from the coordinates rather than from what the place says it is,
 // which resolves all 618 in the pool and gets 617 right. The exception is the
-// class of thing you would expect: Goma's coordinates sit about a kilometre
+// class of thing you would expect: Goma's coordinates sit about a kilometer
 // east of where a 1:10m map draws the DRC/Rwanda line through it, so its
 // outline is Rwanda's. Only a name-to-polygon table would fix that, and one
 // border town is not worth maintaining one.
@@ -134,10 +134,10 @@ function countryName(name) {
 //
 // In practice that is the ten countries whose places carry a state, province,
 // oblast or prefecture -- the US, Canada, Mexico, Brazil, Argentina, Russia,
-// China, India, Indonesia, Australia -- plus the island territories labelled
+// China, India, Indonesia, Australia -- plus the island territories labeled
 // the same way, Madeira, Svalbard, Zanzibar, Penang. Deriving it from the
 // label rather than listing those keeps the two from drifting: a place
-// relabelled in cities.js takes its outline with it.
+// relabeled in cities.js takes its outline with it.
 function namesSubdivision(label) {
   return typeof label === 'string' && label.includes(', ')
 }

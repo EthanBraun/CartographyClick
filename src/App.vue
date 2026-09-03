@@ -101,7 +101,7 @@ const percent = computed(() => {
   if (share <= 0) return 0
   return Math.min(99, Math.max(1, Math.round(share)))
 })
-// Colours the guess pin: the score itself, read as a 0-1 ramp.
+// Colors the guess pin: the score itself, read as a 0-1 ramp.
 const accuracy = computed(() => (result.value ? result.value.points / 100 : 1))
 
 // All three read the index, so all three are computed off `indexed` as well --

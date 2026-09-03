@@ -44,7 +44,7 @@ kbd {
   color: #9aa;
 }
 
-/* One colour per multiplier, so a round's weight reads at a glance wherever
+/* One color per multiplier, so a round's weight reads at a glance wherever
    it shows: the prompt, the round footer and the final breakdown. The
    traffic-light ramp, green to gold to coral, because it already means easy,
    medium, hard to everyone. The green is kept muted so it reads as a tier and
