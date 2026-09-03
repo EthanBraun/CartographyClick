@@ -1,6 +1,3 @@
-build/bin
 node_modules
-frontend/dist
-/CartographyClick.exe
-frontend/package.json.md5
+dist
 tools/.cache

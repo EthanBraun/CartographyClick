@@ -1,19 +1,21 @@
-# README
+# CartographyClick
 
-## About
+A browser clone of the daily geography game at maptap.gg: five cities per
+game, click the globe as close to each one as you can.
 
-This is the official Wails Vanilla template.
+Vue 3 + Vite, with CesiumJS for the globe and ESRI World Imagery for the
+satellite basemap (fetched at runtime, so it needs a network connection).
 
-You can configure the project by editing `wails.json`. More information about the project settings can be found
-here: https://wails.io/docs/reference/project-config
+## Development
 
-## Live Development
-
-To run in live development mode, run `wails dev` in the project directory. This will run a Vite development
-server that will provide very fast hot reload of your frontend changes. If you want to develop in a browser
-and have access to your Go methods, there is also a dev server that runs on http://localhost:34115. Connect
-to this in your browser, and you can call your Go code from devtools.
+    npm install
+    npm run dev        # http://localhost:5173
 
 ## Building
 
-To build a redistributable, production mode package, use `wails build`.
+    npm run build      # static site in dist/
+    npm run preview    # serve dist/ locally
+
+The country and subdivision outlines in `public/borders/` are generated from
+Natural Earth by `node tools/build-borders.js`; they are committed, so that
+only needs re-running when the source or the encoding changes.

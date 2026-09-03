@@ -1,4 +1,4 @@
-// Builds frontend/public/borders/{countries,regions}.json, the outlines the
+// Builds public/borders/{countries,regions}.json, the outlines the
 // reveal draws around the target's country and subdivision.
 //
 //   node tools/build-borders.js
@@ -26,7 +26,7 @@
 //   vertex costs about 4 characters this way against 18 as JSON numbers.
 //
 // The result loads as JSON and stays encoded until a round actually needs a
-// feature -- see frontend/src/game/borders.js, which holds the matching
+// feature -- see src/game/borders.js, which holds the matching
 // decoder. Keep the two in step: PRECISION and the encoding are shared.
 
 const fs = require('fs')
@@ -39,7 +39,7 @@ const SOURCES = {
   regions: 'ne_10m_admin_1_states_provinces.geojson',
 }
 
-const OUT_DIR = path.join(__dirname, '..', 'frontend', 'public', 'borders')
+const OUT_DIR = path.join(__dirname, '..', 'public', 'borders')
 const CACHE_DIR = path.join(__dirname, '.cache')
 
 // 1e-4 degrees, ~11 m at the equator. Well under the source's own accuracy, so

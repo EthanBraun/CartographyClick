@@ -47,8 +47,8 @@ export function loadBorders() {
 
 async function fetchBorders() {
   // Relative to the document, which is what vite.config.js's `base: './'` asks
-  // for everything else: Wails serves the bundle from the root of its own
-  // origin, and so does the dev server.
+  // for everything else, so the same build works at the root of the dev
+  // server and under a GitHub Pages subpath.
   const [loadedCountries, loadedRegions] = await Promise.all([
     fetch('borders/countries.json').then((r) => r.json()),
     fetch('borders/regions.json').then((r) => r.json()),
