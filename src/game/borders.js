@@ -117,7 +117,6 @@ const SHORT_NAMES = new Map([
   ['Republic of the Congo', 'Congo'],
   ['Czech Republic', 'Czechia'],
   ['Federated States of Micronesia', 'Micronesia'],
-  ['Turkish Republic of Northern Cyprus', 'Northern Cyprus'],
   ['United States Virgin Islands', 'US Virgin Islands'],
 ])
 

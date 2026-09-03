@@ -335,7 +335,7 @@ const TIERS = [
     {name: 'Yerevan', region: 'Armenia', lat: 40.1792, lon: 44.4991},
     {name: 'Hangzhou', region: 'Zhejiang, China', lat: 30.2741, lon: 120.1551},
     {name: 'Abidjan', region: 'Ivory Coast', lat: 5.3453, lon: -4.0244},
-    {name: 'Sevastopol', region: 'Crimea', lat: 44.6167, lon: 33.5254},
+    {name: 'Sevastopol', region: 'Crimea', note: 'occupied by Russia since 2014; recognized as part of Ukraine', lat: 44.6167, lon: 33.5254},
     {name: 'Zaragoza', region: 'Spain', lat: 41.6488, lon: -0.8891},
     {name: 'Skopje', region: 'North Macedonia', lat: 41.9981, lon: 21.4254},
     {name: 'Kazan', region: 'Tatarstan, Russia', lat: 55.8304, lon: 49.0661},

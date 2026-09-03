@@ -25,18 +25,26 @@
 //   Google's encoded polylines use. Coordinates dominate the file, and a
 //   vertex costs about 4 characters this way against 18 as JSON numbers.
 //
+// Before any of that, the borders themselves are corrected. Natural Earth's
+// default layer draws de facto control, which is not the map most people have
+// in their heads; see recognize() for what is redrawn and why.
+//
 // The result loads as JSON and stays encoded until a round actually needs a
 // feature -- see src/game/borders.js, which holds the matching
 // decoder. Keep the two in step: PRECISION and the encoding are shared.
 
 const fs = require('fs')
 const path = require('path')
+const polygonClipping = require('polygon-clipping')
 
 const NE =
   'https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson'
 const SOURCES = {
   countries: 'ne_10m_admin_0_countries.geojson',
   regions: 'ne_10m_admin_1_states_provinces.geojson',
+  // Only for Western Sahara, which the countries layer has no whole polygon
+  // for -- see recognize().
+  disputed: 'ne_10m_admin_0_disputed_areas.geojson',
 }
 
 const OUT_DIR = path.join(__dirname, '..', 'public', 'borders')
@@ -323,10 +331,89 @@ function inRing(ring, x, y) {
   return inside
 }
 
-async function build(file, describe, {keep = () => true, mendHoles = false} = {}) {
+// ---------------------------------------------------------------------------
+// Recognition
+// ---------------------------------------------------------------------------
+
+// Natural Earth's default admin-0 layer draws who holds the ground: Morocco
+// runs to the berm it built through Western Sahara, Crimea is Russian, and
+// Somaliland and Northern Cyprus are countries. The game draws internationally
+// recognized borders instead -- the UN's map, near enough -- with two places
+// left as their own outlines because that is how the players this is tuned
+// for know them: Taiwan, which would otherwise fold into China, and Kosovo,
+// which the UN has no position on and most of the West recognizes.
+//
+// Everything here is a real polygon set operation rather than vertex surgery.
+// Each pair shares an edge, and a seam drawn by hand would leave slivers for
+// the point lookup to fall into.
+//
+// Runs on the raw features, before anything is filtered or encoded.
+
+// [lon, lat]. Picks Crimea out of Russia's two hundred-odd polygon parts.
+const SIMFEROPOL = [34.1, 44.95]
+
+function recognize(features, disputed) {
+  const admin = (f) => f.properties.ADMIN
+  const byAdmin = (name) => {
+    const found = features.find((f) => admin(f) === name)
+    if (!found) throw new Error(`countries layer has no feature named ${name}`)
+    return found
+  }
+  const parts = (f) =>
+    f.geometry.type === 'Polygon' ? [f.geometry.coordinates] : f.geometry.coordinates
+  const reshape = (f, multi) => {
+    f.geometry = {type: 'MultiPolygon', coordinates: multi}
+  }
+  const union = (...geoms) => polygonClipping.union(...geoms)
+  const gone = new Set()
+  const note = (text) => process.stderr.write(`  ${text}\n`)
+
+  // Western Sahara. The countries layer has Morocco to the berm and calls only
+  // the strip east of it Western Sahara. The disputed-areas layer carries the
+  // territory as two polygons either side of the berm, so their union is the
+  // territory the UN lists, and Morocco is whatever is left north of it --
+  // the 27°40'N line, which is the northern edge of the berm-side piece.
+  const saharaPieces = disputed.filter((f) => f.properties.BRK_NAME === 'W. Sahara')
+  if (saharaPieces.length !== 2) {
+    throw new Error(`expected 2 Western Sahara pieces, found ${saharaPieces.length}`)
+  }
+  const sahara = union(...saharaPieces.map(parts))
+  reshape(byAdmin('Western Sahara'), sahara)
+  reshape(byAdmin('Morocco'), polygonClipping.difference(parts(byAdmin('Morocco')), sahara))
+  note('Western Sahara: whole territory; Morocco ends at 27°40\'N')
+
+  // Crimea. One part of Russia's multipolygon; it goes back to Ukraine, which
+  // it shares the Perekop isthmus with.
+  const russia = byAdmin('Russia')
+  const crimea = parts(russia).filter((polygon) => inRing(polygon[0], ...SIMFEROPOL))
+  if (crimea.length !== 1) throw new Error(`expected 1 Crimea part, found ${crimea.length}`)
+  reshape(russia, parts(russia).filter((polygon) => !crimea.includes(polygon)))
+  reshape(byAdmin('Ukraine'), union(parts(byAdmin('Ukraine')), crimea))
+  note('Crimea: Ukraine')
+
+  // Unrecognized states, folded back into the country that claims them. The
+  // UN buffer zone across Cyprus goes in too: with both sides one country it
+  // divides nothing, and Nicosia sits on it.
+  const absorb = (into, ...names) => {
+    reshape(byAdmin(into), union(parts(byAdmin(into)), ...names.map((n) => parts(byAdmin(n)))))
+    for (const name of names) gone.add(name)
+    note(`${names.join(' and ')}: ${into}`)
+  }
+  absorb('Somalia', 'Somaliland')
+  absorb('Cyprus', 'Northern Cyprus', 'Cyprus No Mans Area')
+
+  return features.filter((f) => !gone.has(admin(f)))
+}
+
+async function build(
+  file,
+  describe,
+  {keep = () => true, mendHoles = false, adjust = (features) => features} = {},
+) {
   const source = await fetchSource(file)
-  const kept = source.features.filter((f) => keep(f.properties))
-  const dropped = source.features.filter((f) => !keep(f.properties))
+  const adjusted = adjust(source.features)
+  const kept = adjusted.filter((f) => keep(f.properties))
+  const dropped = adjusted.filter((f) => !keep(f.properties))
   if (dropped.length) {
     const names = dropped.map((f) => firstOf(f.properties, 'NAME_EN', 'NAME', 'name'))
     process.stderr.write(`  dropped from ${file}: ${names.join(', ')}
@@ -345,6 +432,7 @@ async function build(file, describe, {keep = () => true, mendHoles = false} = {}
 }
 
 async function main() {
+  const disputed = (await fetchSource(SOURCES.disputed)).features
   const countries = await build(
     SOURCES.countries,
     (p) => ({
@@ -352,7 +440,11 @@ async function main() {
       // ISO 3166-1 alpha-3, which is how a subdivision names its country.
       a: firstOf(p, 'ADM0_A3', 'adm0_a3'),
     }),
-    {keep: isPlace, mendHoles: true},
+    {
+      keep: isPlace,
+      mendHoles: true,
+      adjust: (features) => recognize(features, disputed),
+    },
   )
 
   const shipped = new Set(countries.map((c) => c.a))
