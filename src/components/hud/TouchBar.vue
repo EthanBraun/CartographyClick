@@ -24,7 +24,7 @@ defineEmits(['commit', 'advance', 'restart'])
   <nav class="bar">
     <button v-if="over" @click="$emit('restart')">play again</button>
     <button v-else-if="revealed" @click="$emit('advance')">
-      {{ last ? 'see the score' : 'next city' }}
+      {{ last ? 'continue' : 'next city' }}
     </button>
     <button v-else @click="$emit('commit')">drop pin</button>
   </nav>
