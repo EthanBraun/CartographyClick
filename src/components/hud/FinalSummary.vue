@@ -135,16 +135,18 @@ defineProps({
   font-variant-numeric: tabular-nums;
 }
 
-/* On a phone the card takes the width, and its height is what is left between
-   the prompt strip above and the buttons below. Even a game's five rows can
-   run past that in landscape, so every card scrolls here, not just a study
-   run's, which is why it takes the pointer on a phone regardless. Both
-   selectors, or the study run's own cap above would outrank this one. The
-   breakdown's columns close up to fit four of them in 350px. */
+/* On a phone the card sits well in from the edges, so it reads as a card over
+   the globe and not as a sheet laid across it, and is capped so a wider
+   phone gets the same card with more globe round it. Its height is what is
+   left between the prompt strip above and the buttons below. Even a game's
+   five rows can run past that in landscape, so every card scrolls here, not
+   just a study run's, which is why it takes the pointer on a phone
+   regardless. Both selectors, or the study run's own cap above would outrank
+   this one. The breakdown's columns close up to fit four of them in 300px. */
 @media (max-width: 640px) {
   .final,
   .final.long {
-    width: calc(100vw - 24px);
+    width: min(calc(100vw - 64px), 340px);
     min-width: 0;
     max-height: calc(100vh - 200px);
     max-height: calc(100dvh - 200px);
