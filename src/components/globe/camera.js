@@ -5,7 +5,9 @@
 
 import * as Cesium from 'cesium'
 
-export const METRES_PER_MILE = 1609.344
+// Kilometers everywhere, like the scores and the round result, so the scale
+// bar and the miss it is read against are in one unit.
+export const METERS_PER_KM = 1000
 
 // Advancing to the next city lifts the camera where it stands rather than
 // flying it home. Going home sent every round back through the same point off
@@ -52,10 +54,10 @@ const ZOOM_STEP_NEAR = 0.07           // fraction of remaining altitude, close i
 const ZOOM_STEP_FAR = 0.02            // ... at full zoom-out
 const ZOOM_DAMP_FROM = 3_000_000      // metres; below this, no extra easing
 
-// Closest zoom is defined as "the scale bar reads 5 miles". Solved at runtime
+// Closest zoom is defined as "the scale bar's width covers 8 km". Solved at runtime
 // from the live canvas size and vertical FOV rather than baked in, since both
 // shift with the window.
-const MIN_ZOOM_SCALE_MILES = 5
+const MIN_ZOOM_SCALE_KM = 8
 // The width ScaleReadout draws its bar at. It lives here rather than with the
 // readout because the zoom floor above is solved against it and the two have
 // to agree. When the readout goes, bake the metre value applyMinimumZoom
@@ -69,12 +71,12 @@ export function metresPerPixel(viewer, distance) {
   return (2 * distance * Math.tan(fovy / 2)) / height
 }
 
-// Distance at which SCALE_TARGET_PX of screen covers `miles` of ground.
+// Distance at which SCALE_TARGET_PX of screen covers `km` of ground.
 // Vertical FOV is derived from the horizontal one, so it tracks window shape.
-function zoomDistanceForScale(viewer, miles) {
+function zoomDistanceForScale(viewer, km) {
   const height = viewer.scene.canvas.clientHeight || 1
   const fovy = viewer.camera.frustum.fovy ?? Cesium.Math.PI_OVER_THREE
-  const mpp = (miles * METRES_PER_MILE) / SCALE_TARGET_PX
+  const mpp = (km * METERS_PER_KM) / SCALE_TARGET_PX
   return (mpp * height) / (2 * Math.tan(fovy / 2))
 }
 
@@ -95,7 +97,7 @@ export function updateZoomStep(viewer) {
 
 export function applyMinimumZoom(viewer) {
   if (!viewer || viewer.isDestroyed()) return
-  const distance = zoomDistanceForScale(viewer, MIN_ZOOM_SCALE_MILES)
+  const distance = zoomDistanceForScale(viewer, MIN_ZOOM_SCALE_KM)
   viewer.scene.screenSpaceCameraController.minimumZoomDistance = distance
 }
 

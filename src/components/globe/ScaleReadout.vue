@@ -5,11 +5,14 @@
 // one thing outside this file that exists for it.
 import {onBeforeUnmount, ref} from 'vue'
 import * as Cesium from 'cesium'
-import {METRES_PER_MILE, SCALE_TARGET_PX, metresPerPixel} from './camera'
+import {METERS_PER_KM, SCALE_TARGET_PX, metresPerPixel} from './camera'
 import {PIN_ASPECT, pinRadius} from './pins'
+// The same formatter the round result uses, so the bar and the miss it is
+// read against agree on unit and precision.
+import {formatKm} from '../hud/format'
 
-const NICE_MILES = [
-  0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000,
+const NICE_KM = [
+  0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000,
 ]
 
 const props = defineProps({
@@ -52,13 +55,6 @@ function detach() {
 
 defineExpose({attach, detach})
 
-function formatMiles(miles) {
-  if (miles >= 100) return `${Math.round(miles)} mi`
-  if (miles >= 10) return `${miles.toFixed(1)} mi`
-  if (miles >= 1) return `${miles.toFixed(2)} mi`
-  return `${miles.toFixed(3)} mi`
-}
-
 function update() {
   if (!viewer || viewer.isDestroyed()) return
   const canvas = viewer.scene.canvas
@@ -75,23 +71,20 @@ function update() {
     ? Cesium.Cartesian3.distance(viewer.camera.positionWC, ground)
     : viewer.camera.positionCartographic.height
 
-  const altitude = formatMiles(
-    viewer.camera.positionCartographic.height / METRES_PER_MILE,
-  )
+  const altitude = formatKm(viewer.camera.positionCartographic.height / METERS_PER_KM)
   if (altitude !== altitudeLabel.value) altitudeLabel.value = altitude
 
   const floor = viewer.scene.screenSpaceCameraController.minimumZoomDistance
-  const minZoom = formatMiles(floor / METRES_PER_MILE)
+  const minZoom = formatKm(floor / METERS_PER_KM)
   if (minZoom !== minZoomLabel.value) minZoomLabel.value = minZoom
 
   const mpp = metresPerPixel(viewer, distance)
-  const spanMiles = (SCALE_TARGET_PX * mpp) / METRES_PER_MILE
-  const nice =
-    [...NICE_MILES].reverse().find((m) => m <= spanMiles) ?? NICE_MILES[0]
+  const spanKm = (SCALE_TARGET_PX * mpp) / METERS_PER_KM
+  const nice = [...NICE_KM].reverse().find((k) => k <= spanKm) ?? NICE_KM[0]
 
-  const px = Math.round((nice * METRES_PER_MILE) / mpp)
+  const px = Math.round((nice * METERS_PER_KM) / mpp)
   if (px !== scaleBarPx.value) scaleBarPx.value = px
-  const label = formatMiles(nice)
+  const label = formatKm(nice)
   if (label !== scaleLabel.value) scaleLabel.value = label
 
   const guess = getGuess()
@@ -102,8 +95,8 @@ function update() {
   }
   const surface = Cesium.Cartesian3.fromRadians(guess.longitude, guess.latitude, 0)
   const radius = pinRadius(viewer, surface)
-  const diameter = formatMiles((radius * 2) / METRES_PER_MILE)
-  const lengthText = formatMiles((radius * PIN_ASPECT) / METRES_PER_MILE)
+  const diameter = formatKm((radius * 2) / METERS_PER_KM)
+  const lengthText = formatKm((radius * PIN_ASPECT) / METERS_PER_KM)
   if (diameter !== pinDiameterLabel.value) pinDiameterLabel.value = diameter
   if (lengthText !== pinLengthLabel.value) pinLengthLabel.value = lengthText
 }

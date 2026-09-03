@@ -2,21 +2,21 @@
 // line drawn between them on a reveal.
 
 import * as Cesium from 'cesium'
-import {METRES_PER_MILE, metresPerPixel} from './camera'
+import {METERS_PER_KM, metresPerPixel} from './camera'
 import {UNCLAMPED_HEIGHT} from './outlines'
 import {HOME_HEIGHT} from './viewer'
 
 // The pin is a cylinder along the surface normal, so it reads as a spike
 // standing off the globe and stays legible as the planet rotates under it.
 //
-// Sizing is a floor, not a fixed size. Its true size is a 2-mile radius, which
+// Sizing is a floor, not a fixed size. Its true size is a 3.2 km radius, which
 // is what you get at close zoom. Held at that world size it would fall to a
-// fraction of a pixel at globe view, so once 2 miles shrinks past
+// fraction of a pixel at globe view, so once 3.2 km shrinks past
 // PIN_MIN_RADIUS_PX on screen the pin starts growing in world terms to hold
 // that apparent width — i.e. it scales up as you zoom out. Length is always
 // tied to radius, so the proportions never change.
-const PIN_RADIUS_MILES = 2
-const PIN_RADIUS = PIN_RADIUS_MILES * METRES_PER_MILE
+const PIN_RADIUS_KM = 3.2
+const PIN_RADIUS = PIN_RADIUS_KM * METERS_PER_KM
 const PIN_MIN_RADIUS_PX = 8
 // Holding a constant pixel size forever means the pin grows relative to the
 // globe as the globe shrinks away. Past the home altitude the pin stops
@@ -56,7 +56,7 @@ export function accuracyColour(accuracy) {
   )
 }
 
-// True 2-mile radius up close; from the point where that would shrink below
+// True 3.2 km radius up close; from the point where that would shrink below
 // PIN_MIN_RADIUS_PX on screen, it grows instead of vanishing.
 export function pinRadius(viewer, position) {
   const distance = Cesium.Cartesian3.distance(viewer.camera.positionWC, position)
