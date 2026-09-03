@@ -72,6 +72,10 @@ let savedView = null
 let selectedGame = 0
 // Stops the finale's lift-and-spin; null while it is not running.
 let stopFinale = null
+// Stops the climb to the next city's opening height; null while it is not
+// running. The climb leaves the globe in the player's hands, so it has to be
+// ended by hand whenever something else takes the camera.
+let stopLift = null
 
 function live() {
   return viewer !== null && !viewer.isDestroyed()
@@ -119,6 +123,9 @@ function dropPin() {
 // Put the answer on the globe and frame the miss.
 function revealTarget() {
   if (!live() || !props.target) return
+  // A quick guess can land while the camera is still climbing from the last
+  // round. The reveal owns the camera from here.
+  endLift()
   const sites = markers.reveal(props.target)
   if (sites) flyToReveal(viewer, sites.guess, sites.target)
 }
@@ -151,7 +158,13 @@ function clearRound(restarting) {
   if (restarting) markers.clear()
   else markers.retire()
   markers.clearOutlines()
-  liftForNextRound(viewer)
+  endLift()
+  stopLift = liftForNextRound(viewer)
+}
+
+function endLift() {
+  stopLift?.()
+  stopLift = null
 }
 
 // ---------------------------------------------------------------------------
@@ -163,6 +176,7 @@ function clearRound(restarting) {
 // away that the game is the thing in view rather than the city.
 function beginFinale() {
   if (!live()) return
+  endLift()
   endFinale()
   stopFinale = startFinale(viewer)
 }
@@ -177,6 +191,7 @@ function endFinale() {
 // ---------------------------------------------------------------------------
 
 function enterSelect() {
+  endLift()
   endFinale()
   markers.show(false)
   selectedGame = props.game
@@ -228,7 +243,7 @@ watch(
 
 // Registered ahead of the round watcher on purpose: a restart drops `over` and
 // bumps the counters in one tick, and the spin has to be off before the lift
-// for the next city starts, or it nudges that flight's first frame.
+// for the next city starts, or the two drive the camera at once for a frame.
 watch(
   () => props.over,
   (over) => {
@@ -285,6 +300,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  endLift()
   endFinale()
   for (const off of detach) off()
   detach = []

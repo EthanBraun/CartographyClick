@@ -18,6 +18,9 @@ export const METERS_PER_KM = 1000
 // A fixed height rather than a multiple of the current one, so every round
 // opens at the same scale no matter how wide the last reveal had to pull back.
 //
+// The globe stays in the player's hands through the climb: see
+// liftForNextRound for why the lift is not a flight.
+//
 // Flight times throughout are on the slow side for a camera move. Pulling
 // out is the part that feels violent when it is quick -- the ground rushes
 // away -- so the lifts get the most time and the reveal, which has a far
@@ -161,9 +164,82 @@ function liftTo(viewer, height, duration) {
 }
 
 // Pull up and level out for the next city, holding the ground the reveal left
-// under the center of the screen.
+// under the center of the screen. Runs until it tops out or the returned
+// function is called, whichever is first.
+//
+// Not a flyTo. A flight owns the whole camera, so a drag during it is undone
+// on the next frame and the globe feels stuck for as long as the climb lasts.
+// Driving only the height from a per-frame update leaves longitude and
+// latitude to the camera controller, so the planet can be flicked and spin
+// under a camera that is still on its way up -- which is a nice thing to be
+// able to do while the next city comes in.
+//
+// The climb's own turning -- bringing the aimed ground under the center and
+// levelling off -- is applied as a delta per frame on top of wherever the
+// controller has put the camera, rather than as a position, so the two add up
+// instead of fighting. Height is the one thing set outright, so the lift
+// lands exactly where every round opens. That also means a wheel would be
+// undone every frame, so the wheel ends the lift instead: a player zooming is
+// taking the camera, and gets it.
 export function liftForNextRound(viewer) {
-  liftTo(viewer, NEXT_ROUND_HEIGHT, NEXT_ROUND_FLIGHT_SECONDS)
+  const {scene, camera} = viewer
+  const {canvas} = scene
+  // A reveal flight still in the air would fight the climb; this one wins.
+  camera.cancelFlight()
+
+  const here = camera.positionCartographic
+  const aim = lookAtCartographic(viewer) ?? here
+  const fromHeight = here.height
+  // Shortest way round, so a heading of 359 degrees eases to north through one
+  // degree and not through the whole compass.
+  const turnLon = Cesium.Math.negativePiToPi(aim.longitude - here.longitude)
+  const turnLat = aim.latitude - here.latitude
+  const turnHeading = Cesium.Math.negativePiToPi(0 - camera.heading)
+  const turnPitch = -Cesium.Math.PI_OVER_TWO - camera.pitch
+  const lerp = Cesium.Math.lerp
+  const began = performance.now()
+  // How much of the turn has been handed out so far, so each frame applies
+  // only the slice since the last one.
+  let dealt = 0
+
+  const tick = () => {
+    const seconds = (performance.now() - began) / 1000
+    const t = Cesium.EasingFunction.QUINTIC_IN_OUT(
+      Math.min(1, seconds / NEXT_ROUND_FLIGHT_SECONDS),
+    )
+    const slice = t - dealt
+    dealt = t
+    const now = camera.positionCartographic
+    camera.setView({
+      destination: Cesium.Cartesian3.fromRadians(
+        now.longitude + turnLon * slice,
+        // A flick over the pole plus the slice could nudge past it, which
+        // fromRadians does not take kindly to.
+        Cesium.Math.clamp(
+          now.latitude + turnLat * slice,
+          -Cesium.Math.PI_OVER_TWO,
+          Cesium.Math.PI_OVER_TWO,
+        ),
+        // Eased in log space so the climb looks even, as in the finale.
+        Math.exp(lerp(Math.log(fromHeight), Math.log(NEXT_ROUND_HEIGHT), t)),
+      ),
+      orientation: {
+        heading: camera.heading + turnHeading * slice,
+        pitch: camera.pitch + turnPitch * slice,
+        roll: 0,
+      },
+    })
+    if (t >= 1) stop()
+  }
+  const removeTick = scene.preUpdate.addEventListener(tick)
+  // Safe to call more than once: it stops itself on landing, the wheel stops
+  // it, and the owner stops it, and any of them may come later than another.
+  const stop = () => {
+    removeTick()
+    canvas.removeEventListener('wheel', stop)
+  }
+  canvas.addEventListener('wheel', stop, {passive: true})
+  return stop
 }
 
 // Pull out to where countries are things you can point at, holding whatever
