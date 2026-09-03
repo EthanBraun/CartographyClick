@@ -9,10 +9,12 @@ import {loadBorders, outlineFor} from '../game/borders'
 import {
   applyMinimumZoom,
   captureView,
+  flyToFinale,
   flyToReveal,
   flyToSelect,
   liftForNextRound,
   restoreView,
+  startIdleSpin,
   updateZoomStep,
 } from './globe/camera'
 import {createMarkers} from './globe/markers'
@@ -38,6 +40,9 @@ const props = defineProps({
   // its own it cannot tell "next city" from "start over" -- and the two want
   // opposite things from the pins already on the globe.
   game: {type: Number, default: 0},
+  // True once the run's last city has been revealed and the score is up. The
+  // globe pulls out to the whole planet and turns slowly behind the card.
+  over: {type: Boolean, default: false},
   // True while the globe is being used to pick countries instead of to play a
   // round. Select mode reuses all of this -- the same camera, the same F, the
   // same outline builder -- so it is a flag on this component rather than a
@@ -66,6 +71,8 @@ let detach = []
 // out, and which game it opened on -- see leaveSelect() for what that is for.
 let savedView = null
 let selectedGame = 0
+// Stops the finale's idle spin; null while the globe is not spinning.
+let stopSpin = null
 
 function live() {
   return viewer !== null && !viewer.isDestroyed()
@@ -149,10 +156,34 @@ function clearRound(restarting) {
 }
 
 // ---------------------------------------------------------------------------
+// Finale
+// ---------------------------------------------------------------------------
+
+// Pull out to the whole globe behind the score card and, once there, let it
+// turn. The pins stay: the last round is still on the planet, just seen from
+// far enough away that the game is the thing in view rather than the city.
+function beginFinale() {
+  if (!live()) return
+  endFinale()
+  flyToFinale(viewer, () => {
+    // The flight takes a couple of seconds, and the score can be dismissed or
+    // select mode opened inside them. Spinning then would spin the wrong scene.
+    if (!live() || !props.over || props.selecting || stopSpin) return
+    stopSpin = startIdleSpin(viewer)
+  })
+}
+
+function endFinale() {
+  stopSpin?.()
+  stopSpin = null
+}
+
+// ---------------------------------------------------------------------------
 // Select mode
 // ---------------------------------------------------------------------------
 
 function enterSelect() {
+  endFinale()
   markers.show(false)
   selectedGame = props.game
   savedView = captureView(viewer)
@@ -169,7 +200,11 @@ function leaveSelect() {
   // there would hand the first city a view of where the last one was.
   const view = savedView
   savedView = null
-  if (view && props.game === selectedGame) restoreView(viewer, view)
+  if (!view || props.game !== selectedGame) return
+  // Back to a finished game is back to its score card, so the finale resumes
+  // rather than the camera landing on a globe that has stopped turning.
+  if (props.over) beginFinale()
+  else restoreView(viewer, view)
 }
 
 watch(
@@ -194,6 +229,17 @@ watch(
     if (!revealed) return
     revealTarget()
     revealBorders()
+  },
+)
+
+// Registered ahead of the round watcher on purpose: a restart drops `over` and
+// bumps the counters in one tick, and the spin has to be off before the lift
+// for the next city starts, or it nudges that flight's first frame.
+watch(
+  () => props.over,
+  (over) => {
+    if (over) beginFinale()
+    else endFinale()
   },
 )
 
@@ -245,6 +291,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  endFinale()
   for (const off of detach) off()
   detach = []
   readout.value?.detach()

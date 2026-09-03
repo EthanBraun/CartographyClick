@@ -25,6 +25,15 @@ const NEXT_ROUND_FLIGHT_SECONDS = 1.4
 const SELECT_HEIGHT = 20_000_000
 const SELECT_FLIGHT_SECONDS = 1.2
 
+// The final score sits over the whole globe, turning slowly. The same framing
+// as select mode, since both want the planet as an object rather than a place,
+// and a slower flight because nothing is waiting on the far side of it. One
+// turn every three minutes: enough to read as alive, slow enough that nothing
+// on it is hard to look at.
+const FINALE_HEIGHT = SELECT_HEIGHT
+const FINALE_FLIGHT_SECONDS = 2.2
+const FINALE_SPIN_RADIANS_PER_SECOND = Cesium.Math.TWO_PI / 180
+
 // Revealing frames both pins. Cesium puts the camera exactly far enough to fit
 // the bounding sphere, which crops to the two pins and nothing else — no
 // coastline, no country, nothing to read the miss against. Padding the radius
@@ -120,7 +129,7 @@ export function lookAtCartographic(viewer) {
 
 // Straight up to `height` and level, holding the ground the camera is aimed at
 // under the center of the screen.
-function liftTo(viewer, height, duration) {
+function liftTo(viewer, height, duration, onArrive) {
   // Aiming at space is rare but possible; standing still beats snapping to an
   // arbitrary point, so fall back to whatever the camera is above.
   const site = lookAtCartographic(viewer) ?? viewer.camera.positionCartographic
@@ -135,6 +144,10 @@ function liftTo(viewer, height, duration) {
     // says so rather than relying on the default staying put.
     orientation: {heading: 0, pitch: -Cesium.Math.PI_OVER_TWO, roll: 0},
     duration,
+    // Only on arrival, not on cancel: a flight that another flight cut short
+    // never got where it was going, and whatever was waiting there should not
+    // start somewhere else.
+    complete: onArrive,
   })
 }
 
@@ -149,6 +162,43 @@ export function liftForNextRound(viewer) {
 // altitude a reveal leaves would open it on one valley somewhere.
 export function flyToSelect(viewer) {
   liftTo(viewer, SELECT_HEIGHT, SELECT_FLIGHT_SECONDS)
+}
+
+// Pull out to the whole globe for the final score, holding the last city under
+// the middle of the screen on the way up. `onArrive` runs once the flight has
+// landed, which is where the spin starts -- a flight sets the camera outright
+// every frame, so turning it during one would only fight the tween.
+export function flyToFinale(viewer, onArrive) {
+  liftTo(viewer, FINALE_HEIGHT, FINALE_FLIGHT_SECONDS, onArrive)
+}
+
+// Turn the globe slowly under a camera that is otherwise standing still, until
+// the returned function is called. Rotating about the polar axis keeps the
+// camera's latitude and its north-up heading, so it reads as the planet
+// turning rather than the camera wandering. Any input on the canvas stops it
+// too: a player who reaches for the globe wants it where they put it, not
+// drifting out from under them.
+export function startIdleSpin(viewer) {
+  const {scene, camera} = viewer
+  const {canvas} = scene
+  let last = performance.now()
+  const tick = () => {
+    const now = performance.now()
+    const seconds = (now - last) / 1000
+    last = now
+    camera.rotate(Cesium.Cartesian3.UNIT_Z, FINALE_SPIN_RADIANS_PER_SECOND * seconds)
+  }
+  const removeTick = scene.preUpdate.addEventListener(tick)
+  // Safe to call more than once: the canvas stops it and the owner stops it,
+  // and either may come second.
+  const stop = () => {
+    removeTick()
+    canvas.removeEventListener('pointerdown', stop)
+    canvas.removeEventListener('wheel', stop)
+  }
+  canvas.addEventListener('pointerdown', stop)
+  canvas.addEventListener('wheel', stop, {passive: true})
+  return stop
 }
 
 // Frame the guess and the answer together. Both sites are {longitude,

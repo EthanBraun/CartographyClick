@@ -131,8 +131,8 @@ function onGuess(guess) {
 }
 
 function advance() {
-  // The last city stays on screen behind the summary, so a run ends without
-  // clearing the round that finished it.
+  // The last round stays on the globe behind the summary, so a run ends
+  // without clearing it; the globe pulls out and turns instead, off `over`.
   if (!revealed.value) return
   if (run.value.index >= rounds.value - 1) {
     run.value.over = true
@@ -284,6 +284,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown))
     <Globe
       :accuracy="accuracy"
       :game="game"
+      :over="run.over"
       :revealed="revealed"
       :round="round"
       :selected="selection.map((country) => country.code)"
