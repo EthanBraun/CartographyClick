@@ -9,12 +9,11 @@ import {loadBorders, outlineFor} from '../game/borders'
 import {
   applyMinimumZoom,
   captureView,
-  flyToFinale,
   flyToReveal,
   flyToSelect,
   liftForNextRound,
   restoreView,
-  startIdleSpin,
+  startFinale,
   updateZoomStep,
 } from './globe/camera'
 import {createMarkers} from './globe/markers'
@@ -71,8 +70,8 @@ let detach = []
 // out, and which game it opened on -- see leaveSelect() for what that is for.
 let savedView = null
 let selectedGame = 0
-// Stops the finale's idle spin; null while the globe is not spinning.
-let stopSpin = null
+// Stops the finale's lift-and-spin; null while it is not running.
+let stopFinale = null
 
 function live() {
   return viewer !== null && !viewer.isDestroyed()
@@ -159,23 +158,18 @@ function clearRound(restarting) {
 // Finale
 // ---------------------------------------------------------------------------
 
-// Pull out to the whole globe behind the score card and, once there, let it
-// turn. The pins stay: the last round is still on the planet, just seen from
-// far enough away that the game is the thing in view rather than the city.
+// Pull out to the whole globe behind the score card, turning as it goes. The
+// pins stay: the last round is still on the planet, just seen from far enough
+// away that the game is the thing in view rather than the city.
 function beginFinale() {
   if (!live()) return
   endFinale()
-  flyToFinale(viewer, () => {
-    // The flight takes a couple of seconds, and the score can be dismissed or
-    // select mode opened inside them. Spinning then would spin the wrong scene.
-    if (!live() || !props.over || props.selecting || stopSpin) return
-    stopSpin = startIdleSpin(viewer)
-  })
+  stopFinale = startFinale(viewer)
 }
 
 function endFinale() {
-  stopSpin?.()
-  stopSpin = null
+  stopFinale?.()
+  stopFinale = null
 }
 
 // ---------------------------------------------------------------------------

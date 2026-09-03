@@ -33,6 +33,12 @@ const SELECT_FLIGHT_SECONDS = 1.2
 const FINALE_HEIGHT = SELECT_HEIGHT
 const FINALE_FLIGHT_SECONDS = 2.2
 const FINALE_SPIN_RADIANS_PER_SECOND = Cesium.Math.TWO_PI / 180
+// The climb also slides the camera to the equator, so the turn that follows
+// is about the pole with the equator level across the middle of the screen,
+// the way a globe on a stand turns. Ending over the last city instead would
+// leave the planet turning under a camera parked off-axis, which reads as the
+// camera orbiting at a tilt rather than the world going round.
+const FINALE_LATITUDE = 0
 
 // Revealing frames both pins. Cesium puts the camera exactly far enough to fit
 // the bounding sphere, which crops to the two pins and nothing else — no
@@ -129,7 +135,7 @@ export function lookAtCartographic(viewer) {
 
 // Straight up to `height` and level, holding the ground the camera is aimed at
 // under the center of the screen.
-function liftTo(viewer, height, duration, onArrive) {
+function liftTo(viewer, height, duration) {
   // Aiming at space is rare but possible; standing still beats snapping to an
   // arbitrary point, so fall back to whatever the camera is above.
   const site = lookAtCartographic(viewer) ?? viewer.camera.positionCartographic
@@ -144,10 +150,6 @@ function liftTo(viewer, height, duration, onArrive) {
     // says so rather than relying on the default staying put.
     orientation: {heading: 0, pitch: -Cesium.Math.PI_OVER_TWO, roll: 0},
     duration,
-    // Only on arrival, not on cancel: a flight that another flight cut short
-    // never got where it was going, and whatever was waiting there should not
-    // start somewhere else.
-    complete: onArrive,
   })
 }
 
@@ -164,29 +166,71 @@ export function flyToSelect(viewer) {
   liftTo(viewer, SELECT_HEIGHT, SELECT_FLIGHT_SECONDS)
 }
 
-// Pull out to the whole globe for the final score, holding the last city under
-// the middle of the screen on the way up. `onArrive` runs once the flight has
-// landed, which is where the spin starts -- a flight sets the camera outright
-// every frame, so turning it during one would only fight the tween.
-export function flyToFinale(viewer, onArrive) {
-  liftTo(viewer, FINALE_HEIGHT, FINALE_FLIGHT_SECONDS, onArrive)
-}
-
-// Turn the globe slowly under a camera that is otherwise standing still, until
-// the returned function is called. Rotating about the polar axis keeps the
-// camera's latitude and its north-up heading, so it reads as the planet
-// turning rather than the camera wandering. Any input on the canvas stops it
-// too: a player who reaches for the globe wants it where they put it, not
-// drifting out from under them.
-export function startIdleSpin(viewer) {
+// The final score's camera move: out to the whole globe and over to the
+// equator, levelling off, with the planet already turning under the climb and
+// carrying on once it tops out. Runs until the returned function is called.
+//
+// Not a flyTo. A flight owns the camera for as long as it runs, so a turn could
+// only begin once it landed, and the seam showed. Driving the lift and the
+// turn from one per-frame update makes them a single motion instead. The
+// turn is a drift in longitude, which keeps the camera's latitude and its
+// north-up heading, so it reads as the planet turning rather than the camera
+// wandering.
+//
+// Any input on the canvas stops it: a player who reaches for the globe wants
+// it where they put it, not drifting out from under them.
+export function startFinale(viewer) {
   const {scene, camera} = viewer
   const {canvas} = scene
-  let last = performance.now()
+  // The reveal's flight may still be in the air if the score came up quickly.
+  // Two things setting the camera every frame would fight; this one wins.
+  camera.cancelFlight()
+
+  const here = camera.positionCartographic
+  // Hold the ground under the middle of the screen in longitude through the
+  // climb, like the other lifts; latitude slides to the equator instead. Aiming
+  // at space is rare but possible; standing put beats snapping to an
+  // arbitrary point.
+  const aim = lookAtCartographic(viewer) ?? here
+  const from = {
+    lon: here.longitude,
+    lat: here.latitude,
+    height: here.height,
+    heading: camera.heading,
+    pitch: camera.pitch,
+  }
+  // Shortest way round for the angles, so a heading of 359 degrees eases to
+  // north through one degree and not through the whole compass.
+  const turnLon = Cesium.Math.negativePiToPi(aim.longitude - from.lon)
+  const turnHeading = Cesium.Math.negativePiToPi(0 - from.heading)
+  const turnPitch = -Cesium.Math.PI_OVER_TWO - from.pitch
+  const lerp = Cesium.Math.lerp
+  const began = performance.now()
+
   const tick = () => {
-    const now = performance.now()
-    const seconds = (now - last) / 1000
-    last = now
-    camera.rotate(Cesium.Cartesian3.UNIT_Z, FINALE_SPIN_RADIANS_PER_SECOND * seconds)
+    const seconds = (performance.now() - began) / 1000
+    // The same easing Cesium's own flights use, so this one feels like them.
+    const t = Cesium.EasingFunction.QUINTIC_IN_OUT(
+      Math.min(1, seconds / FINALE_FLIGHT_SECONDS),
+    )
+    // Westward, the way Cesium's rotate about the pole with a positive angle
+    // went, so the direction settled on earlier is kept.
+    const spun = FINALE_SPIN_RADIANS_PER_SECOND * seconds
+    camera.setView({
+      destination: Cesium.Cartesian3.fromRadians(
+        from.lon + turnLon * t - spun,
+        lerp(from.lat, FINALE_LATITUDE, t),
+        // Height eased in log space, so the climb looks even. Eased linearly
+        // it would clear most of the distance while the city was still
+        // legible and then crawl through the last stretch of empty space.
+        Math.exp(lerp(Math.log(from.height), Math.log(FINALE_HEIGHT), t)),
+      ),
+      orientation: {
+        heading: from.heading + turnHeading * t,
+        pitch: from.pitch + turnPitch * t,
+        roll: 0,
+      },
+    })
   }
   const removeTick = scene.preUpdate.addEventListener(tick)
   // Safe to call more than once: the canvas stops it and the owner stops it,
