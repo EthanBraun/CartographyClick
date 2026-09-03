@@ -193,13 +193,13 @@ function liftTo(viewer, height, duration) {
 // levelling off -- is applied as a delta per frame on top of wherever the
 // controller has put the camera, rather than as a position, so the two add up
 // instead of fighting. Height is the one thing set outright, so the lift
-// lands exactly where every round opens. That also means a wheel would be
-// undone every frame, so the wheel ends the lift instead: a player zooming is
-// taking the camera, and gets it. A second finger is the same thing said on a
-// touchscreen -- a pinch starting -- and ends it the same way.
+// lands exactly where every round opens. That also means a wheel or a pinch
+// is undone every frame, and that is meant: the climb owns the height and the
+// levelling to the end. Letting a zoom cut it short left the camera at
+// whatever tilt it had reached, with no way on a phone to level it again.
+// Turning the globe is the player's during the climb; zooming it waits.
 export function liftForNextRound(viewer) {
   const {scene, camera} = viewer
-  const {canvas} = scene
   // A reveal flight still in the air would fight the climb; this one wins.
   camera.cancelFlight()
 
@@ -248,19 +248,9 @@ export function liftForNextRound(viewer) {
     if (t >= 1) stop()
   }
   const removeTick = scene.preUpdate.addEventListener(tick)
-  // Safe to call more than once: it stops itself on landing, the wheel stops
-  // it, and the owner stops it, and any of them may come later than another.
-  const stop = () => {
-    removeTick()
-    canvas.removeEventListener('wheel', stop)
-    canvas.removeEventListener('pointerdown', onPointerDown)
-  }
-  // The first finger down is primary; the one that makes it a pinch is not.
-  const onPointerDown = (event) => {
-    if (event.pointerType === 'touch' && !event.isPrimary) stop()
-  }
-  canvas.addEventListener('wheel', stop, {passive: true})
-  canvas.addEventListener('pointerdown', onPointerDown, {passive: true})
+  // Safe to call more than once: it stops itself on landing and the owner
+  // stops it, and either may come later than the other.
+  const stop = () => removeTick()
   return stop
 }
 
