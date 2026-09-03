@@ -17,7 +17,7 @@ func main() {
 
 	// Create application with options
 	err := wails.Run(&options.App{
-		Title:  "MapTap",
+		Title:  "CartographyClick",
 		Width:  2100,
 		Height: 1100,
 		AssetServer: &assetserver.Options{

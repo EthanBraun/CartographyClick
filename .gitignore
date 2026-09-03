@@ -1,6 +1,6 @@
 build/bin
 node_modules
 frontend/dist
-/MapTap.exe
+/CartographyClick.exe
 frontend/package.json.md5
 tools/.cache

@@ -675,7 +675,7 @@ export const ALL_PLACES = TIERS.flat()
 // roughly sqrt(N) games. Keeping a recent list per round and drawing only from
 // what isn't on it turns "unlikely to repeat" into "cannot repeat for a while".
 const RECENT_MAX = 30
-const RECENT_KEY = 'maptap.recent.v3'
+const RECENT_KEY = 'cartographyclick.recent.v3'
 
 // Two targets this close would take the same click, so one game never uses
 // both. Covers same-name pairs the source keeps apart (Tripoli in Libya and in

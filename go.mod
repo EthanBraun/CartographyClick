@@ -1,4 +1,4 @@
-module MapTap
+module CartographyClick
 
 go 1.23
 
