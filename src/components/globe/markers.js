@@ -10,7 +10,7 @@ import {TARGET_COLOR, accuracyColor, addLink, addPin} from './pins'
 // Revealing also outlines where the answer was: the country in blue, and --
 // where the card names one, so the line has something to match -- the state,
 // province or prefecture inside it in yellow. Both are off the accuracy ramp
-// and off the answer pin's cyan, so an outline never reads as a score.
+// and off the answer pin's gray, so an outline never reads as a score.
 const COUNTRY_BORDER_COLOR = Cesium.Color.fromHsl(217 / 360, 0.9, 0.58, 0.95)
 const REGION_BORDER_COLOR = Cesium.Color.fromHsl(48 / 360, 0.95, 0.55, 0.95)
 // The subdivision sits inside the country and shares its coast, so it goes on

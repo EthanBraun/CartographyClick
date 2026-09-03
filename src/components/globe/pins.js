@@ -34,8 +34,10 @@ const RAMP_SATURATION = 0.78
 const RAMP_LIGHTNESS = 0.41
 
 // The answer pin has to read as "the city was here", never as a score, so it
-// sits off the accuracy ramp entirely — cyan is nowhere on a green-to-red run.
-export const TARGET_COLOR = Cesium.Color.fromHsl(189 / 360, 0.82, 0.52, PIN_OPACITY)
+// sits off the accuracy ramp entirely: a light neutral gray, which no point on
+// a green-to-red run can be mistaken for, and which stays legible against
+// ocean, desert and forest alike.
+export const TARGET_COLOR = Cesium.Color.fromHsl(0, 0, 0.82, PIN_OPACITY)
 
 // Geodesic tie-line from the guess to the answer, so a miss reads as a
 // direction rather than just a number.
