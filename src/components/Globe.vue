@@ -406,4 +406,24 @@ onBeforeUnmount(() => {
 .globe :deep(.cesium-credit-logoContainer) {
   display: none !important;
 }
+
+/* The full data attribution opens in Cesium's own lightbox, which sits at
+   z-index 1 inside this container -- under the HUD, which is at 2. On a
+   desktop that is fine: the box is small and central and the HUD is out of
+   its way. Under 576px Cesium makes it a full-screen sheet instead, and the
+   HUD's top strip then draws over its top-right corner, which is where its
+   only close control is; and a sheet has no outside to tap. So the lightbox
+   goes above the HUD, and on a touchscreen its close control is made the
+   size of a finger. */
+.globe :deep(.cesium-credit-lightbox-overlay) {
+  z-index: 3;
+}
+
+@media (pointer: coarse) {
+  .globe :deep(.cesium-credit-lightbox-close) {
+    padding: 10px 16px;
+    font-size: 26pt;
+    line-height: 1;
+  }
+}
 </style>
