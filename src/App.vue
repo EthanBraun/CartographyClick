@@ -68,12 +68,12 @@ const round = ref(0)
 // moves for both.
 const game = ref(0)
 
-// Whether the main pointer is a finger: a phone or a tablet. Two things
-// follow. The globe aims with a crosshair instead of a cursor, and the key
-// hints give way to buttons -- the keys themselves keep working, for a tablet
-// with a keyboard on it. Read from the same media query the stylesheets use,
-// so what is drawn and what is wired never disagree, and watched, since
-// plugging a mouse into a tablet flips it.
+// Whether the main pointer is a finger: a phone or a tablet. Three things
+// follow. The globe aims with a crosshair instead of a cursor, the key hints
+// give way to buttons -- the keys themselves keep working, for a tablet with
+// a keyboard on it -- and study mode is off, see enterSelect(). Read from the
+// same media query the stylesheets use, so what is drawn and what is wired
+// never disagree, and watched, since plugging a mouse into a tablet flips it.
 const coarsePointer = window.matchMedia('(pointer: coarse)')
 const touch = ref(coarsePointer.matches)
 const onPointerChange = (event) => {
@@ -134,13 +134,6 @@ const chips = computed(() =>
 const selectedCities = computed(() =>
   chips.value.reduce((sum, chip) => sum + chip.count, 0),
 )
-// Whether the country under the aim is already in the selection, so the touch
-// button can say which way its toggle goes.
-const hoveredPicked = computed(
-  () =>
-    hovered.value !== null &&
-    selection.value.some((country) => country.code === hovered.value.code),
-)
 
 function onGuess(guess) {
   if (revealed.value) return
@@ -188,6 +181,9 @@ function toggleSelect() {
 }
 
 function enterSelect() {
+  // Not on a phone. Picking a dozen countries by dragging each one under a
+  // crosshair is a chore, and the game is the thing worth having there.
+  if (touch.value) return
   // Only a game is worth holding. Entering from a study run leaves whatever
   // game was already held exactly where it is -- a run is scratch work, and
   // backing out of one returns to the game it interrupted, not to it.
@@ -367,26 +363,16 @@ onBeforeUnmount(() => {
         :total="total"
       />
 
-      <!-- Every handler here is one the keys already call; see onKeyDown and
-           the two dispatchers under it for which key does which. -->
+      <!-- Every handler here is one the keys already call; see onKeyDown for
+           which key does which. Study mode is not offered on touch, and
+           enterSelect() refuses it, so the bar only ever has a game to run. -->
       <TouchBar
         v-if="touch"
-        :chips="chips.length"
-        :hovered="hovered"
-        :hovered-count="hoveredCount"
         :over="run.over"
-        :picked="hoveredPicked"
         :revealed="revealed"
-        :selected-cities="selectedCities"
-        :selecting="selecting"
-        :studying="studying"
         @advance="advance"
-        @back="resumeGame"
-        @clear="clearSelection"
         @commit="globe?.commit()"
         @restart="restart"
-        @select="enterSelect"
-        @study="startStudy"
       />
     </div>
   </div>
