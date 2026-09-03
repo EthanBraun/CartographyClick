@@ -32,11 +32,13 @@ const SELECT_FLIGHT_SECONDS = 2.0
 
 // The final score sits over the whole globe, turning slowly. The same framing
 // as select mode, since both want the planet as an object rather than a place,
-// and a slower flight because nothing is waiting on the far side of it. One
-// turn every three minutes: enough to read as alive, slow enough that nothing
-// on it is hard to look at.
+// and a much slower flight because nothing is waiting on the far side of it,
+// and because the climb, the slide to the equator and the spin all run at
+// once: quick, the three together read as a lurch. One turn every three
+// minutes: enough to read as alive, slow enough that nothing on it is hard to
+// look at.
 const FINALE_HEIGHT = SELECT_HEIGHT
-const FINALE_FLIGHT_SECONDS = 3.5
+const FINALE_FLIGHT_SECONDS = 7
 const FINALE_SPIN_RADIANS_PER_SECOND = Cesium.Math.TWO_PI / 180
 // The climb also slides the camera to the equator, so the turn that follows
 // is about the pole with the equator level across the middle of the screen,
@@ -182,14 +184,17 @@ export function flyToSelect(viewer) {
 // north-up heading, so it reads as the planet turning rather than the camera
 // wandering.
 //
-// Any input on the canvas stops it: a player who reaches for the globe wants
-// it where they put it, not drifting out from under them.
+// The globe is locked while it runs. The score card is the thing on screen
+// and the planet is its backdrop; a drag that stopped the turn or a wheel that
+// zoomed in on it would only break the picture, with nothing to be gained from
+// the view it got. The lock lifts when the returned function is called.
 export function startFinale(viewer) {
   const {scene, camera} = viewer
-  const {canvas} = scene
+  const controller = scene.screenSpaceCameraController
   // The reveal's flight may still be in the air if the score came up quickly.
   // Two things setting the camera every frame would fight; this one wins.
   camera.cancelFlight()
+  controller.enableInputs = false
 
   const here = camera.positionCartographic
   // Hold the ground under the middle of the screen in longitude through the
@@ -238,16 +243,11 @@ export function startFinale(viewer) {
     })
   }
   const removeTick = scene.preUpdate.addEventListener(tick)
-  // Safe to call more than once: the canvas stops it and the owner stops it,
-  // and either may come second.
-  const stop = () => {
+  // Safe to call more than once; the owner may stop it again on the way out.
+  return () => {
     removeTick()
-    canvas.removeEventListener('pointerdown', stop)
-    canvas.removeEventListener('wheel', stop)
+    if (!viewer.isDestroyed()) controller.enableInputs = true
   }
-  canvas.addEventListener('pointerdown', stop)
-  canvas.addEventListener('wheel', stop, {passive: true})
-  return stop
 }
 
 // Frame the guess and the answer together. Both sites are {longitude,
