@@ -17,13 +17,18 @@ export const METERS_PER_KM = 1000
 //
 // A fixed height rather than a multiple of the current one, so every round
 // opens at the same scale no matter how wide the last reveal had to pull back.
+//
+// Flight times throughout are on the slow side for a camera move. Pulling
+// out is the part that feels violent when it is quick -- the ground rushes
+// away -- so the lifts get the most time and the reveal, which has a far
+// shorter way to go, a little less.
 const NEXT_ROUND_HEIGHT = 14_000_000
-const NEXT_ROUND_FLIGHT_SECONDS = 1.4
+const NEXT_ROUND_FLIGHT_SECONDS = 2.4
 
 // Whole-globe framing to pick countries from. Far enough out that a country is
 // a thing you can point at, and level, since picking is done off shape.
 const SELECT_HEIGHT = 20_000_000
-const SELECT_FLIGHT_SECONDS = 1.2
+const SELECT_FLIGHT_SECONDS = 2.0
 
 // The final score sits over the whole globe, turning slowly. The same framing
 // as select mode, since both want the planet as an object rather than a place,
@@ -31,7 +36,7 @@ const SELECT_FLIGHT_SECONDS = 1.2
 // turn every three minutes: enough to read as alive, slow enough that nothing
 // on it is hard to look at.
 const FINALE_HEIGHT = SELECT_HEIGHT
-const FINALE_FLIGHT_SECONDS = 2.2
+const FINALE_FLIGHT_SECONDS = 3.5
 const FINALE_SPIN_RADIANS_PER_SECOND = Cesium.Math.TWO_PI / 180
 // The climb also slides the camera to the equator, so the turn that follows
 // is about the pole with the equator level across the middle of the screen,
@@ -49,7 +54,7 @@ const REVEAL_PADDING = 2
 // a good guess would otherwise dive to the zoom floor. This is what actually
 // governs how close a *close* guess gets, and padding barely touches it.
 const REVEAL_MIN_RADIUS = 90_000
-const REVEAL_FLIGHT_SECONDS = 1.6
+const REVEAL_FLIGHT_SECONDS = 2.4
 // Cesium frames a bounding sphere at a 45-degree pitch by default, which swings
 // the globe over hard on every reveal. Sit much closer to straight down so the
 // result reads as a map you can measure by eye. Not fully overhead, though: the
