@@ -1,0 +1,51 @@
+/* What every HUD panel shares: the backing, the key caps, and the two slots
+   panels sit in. Loaded once by App.vue rather than scoped, because a scoped
+   style stops at the child's root and these are used well inside them. */
+
+.panel {
+  padding: 12px 18px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.6);
+}
+
+kbd {
+  padding: 1px 5px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 4px;
+  font: inherit;
+  font-size: 0.9em;
+}
+
+/* The ask rides over whatever imagery the round happens to land on, and a
+   text-shadow alone loses to snow, salt flats and cloud. It takes the same
+   panel as the footers instead -- the two are read in the same glance, so
+   backing only one of them would read as an accident. */
+.prompt {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  text-align: center;
+}
+
+/* What to do, or what just happened: the line under the globe. */
+.footer {
+  position: absolute;
+  bottom: 26px;
+  left: 50%;
+  transform: translateX(-50%);
+  text-align: center;
+}
+
+.meta {
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #9aa;
+}
+
+.hint {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #8a9;
+}

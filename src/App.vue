@@ -1,6 +1,16 @@
 <script setup>
+// The game itself: which run is being played, where it is up to, and what the
+// keys do. The globe draws it and the HUD panels read it; both are told what
+// they need through props and hand back events.
 import {computed, onBeforeUnmount, onMounted, ref} from 'vue'
 import Globe from './components/Globe.vue'
+import AimHint from './components/hud/AimHint.vue'
+import FinalSummary from './components/hud/FinalSummary.vue'
+import PickerPanel from './components/hud/PickerPanel.vue'
+import RoundPrompt from './components/hud/RoundPrompt.vue'
+import RoundResult from './components/hud/RoundResult.vue'
+import Tally from './components/hud/Tally.vue'
+import './components/hud/hud.css'
 import {pickRound} from './game/cities'
 import {cityCount, loadCountryIndex, studyRun} from './game/study'
 import {
@@ -262,14 +272,6 @@ function onSummaryKey(event) {
   }
 }
 
-// These get read at a glance, so trade precision for legibility as they grow:
-// metre resolution is noise once you are 8,000 km out.
-function formatKm(km) {
-  if (km < 10) return `${km.toFixed(2)} km`
-  if (km < 100) return `${km.toFixed(1)} km`
-  return `${Math.round(km).toLocaleString()} km`
-}
-
 onMounted(() => window.addEventListener('keydown', onKeyDown))
 onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown))
 </script>
@@ -290,109 +292,37 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown))
     />
 
     <div class="hud">
-      <header v-if="selecting" class="panel prompt picker">
-        <div class="meta">study a country</div>
+      <PickerPanel
+        v-if="selecting"
+        :chips="chips"
+        :hovered="hovered"
+        :hovered-count="hoveredCount"
+        :indexed="indexed"
+        :selected-cities="selectedCities"
+      />
+      <RoundPrompt
+        v-else-if="city"
+        :city="city"
+        :index="run.index"
+        :multiplier="multiplier"
+        :rounds="rounds"
+        :studying="studying"
+      />
 
-        <div class="hovered">
-          <template v-if="!indexed">reading borders&hellip;</template>
-          <template v-else-if="!hovered">point at a country</template>
-          <template v-else>
-            {{ hovered.name }}
-            <span class="hovered-count" :class="{none: !hoveredCount}">
-              {{ hoveredCount ? `${hoveredCount} cities` : 'no cities in the pool' }}
-            </span>
-          </template>
-        </div>
+      <Tally v-if="!selecting" :max-score="maxScore" :total="total" />
 
-        <div v-if="chips.length" class="chips">
-          <span v-for="chip in chips" :key="chip.code" class="chip">
-            {{ chip.name }}<span class="chip-count">{{ chip.count }}</span>
-          </span>
-        </div>
-        <div v-else class="chips-empty">nothing picked yet</div>
+      <AimHint v-if="selecting || !revealed" :city="city" :selecting="selecting" />
+      <RoundResult v-else-if="!run.over" :multiplier="multiplier" :result="result" />
 
-        <div class="hint">
-          <kbd>F</kbd> toggle &middot;
-          <kbd>space</kbd>
-          <template v-if="selectedCities">study {{ selectedCities }} cities</template>
-          <template v-else>study</template>
-          <template v-if="chips.length"> &middot; <kbd>C</kbd> clear</template>
-          &middot; <kbd>`</kbd> back to the game
-        </div>
-      </header>
-
-      <header v-else-if="city" class="panel prompt">
-        <div class="meta">
-          <template v-if="studying">
-            city {{ run.index + 1 }} of {{ rounds }}
-            <span class="tag">study</span>
-          </template>
-          <template v-else>
-            round {{ run.index + 1 }} of {{ rounds }}
-            <span class="multiplier">&times;{{ multiplier }}</span>
-          </template>
-        </div>
-        <h1 class="city">{{ city.name }}</h1>
-        <div class="country">{{ city.region }}</div>
-        <div v-if="city.note" class="note">{{ city.note }}</div>
-      </header>
-
-      <div v-if="!selecting" class="tally">
-        <span class="tally-score">{{ total }}</span>
-        <span class="tally-max">/ {{ maxScore }}</span>
-      </div>
-
-      <footer v-if="selecting" class="panel aim">
-        the globe is the picker &mdash; hover a country and take it with
-        <kbd>F</kbd>
-      </footer>
-
-      <footer v-else-if="!revealed" class="panel aim">
-        aim at {{ city.name }} and press <kbd>F</kbd>
-        <div class="aside"><kbd>`</kbd> study a country instead</div>
-      </footer>
-
-      <footer v-else-if="!run.over" class="panel result">
-        <div class="row">
-          <span class="label">off by</span>
-          <span class="value">{{ formatKm(result.distanceKm) }}</span>
-        </div>
-        <div class="row">
-          <span class="label">points</span>
-          <span class="value">
-            {{ result.points }}
-            <template v-if="multiplier > 1">
-              <span class="dim">&times;{{ multiplier }} =</span>
-              {{ result.awarded }}
-            </template>
-          </span>
-        </div>
-        <div class="hint">
-          <kbd>space</kbd> for the next city
-        </div>
-      </footer>
-
-      <div v-if="run.over && !selecting" class="panel final" :class="{long: studying}">
-        <div class="final-label">{{ studying ? 'study run' : 'final score' }}</div>
-        <div class="final-score">
-          <template v-if="studying">{{ percent }}<span class="final-max">%</span></template>
-          <template v-else>{{ total }}<span class="final-max">/ {{ maxScore }}</span></template>
-        </div>
-        <div v-if="studying" class="final-raw">{{ total }} / {{ maxScore }}</div>
-        <ol class="breakdown">
-          <li v-for="(entry, i) in run.scored" :key="i">
-            <span class="breakdown-city">{{ cities[i].name }}</span>
-            <span class="breakdown-distance">{{ formatKm(entry.distanceKm) }}</span>
-            <span class="breakdown-points">{{ entry.awarded }}</span>
-          </li>
-        </ol>
-        <div v-if="studying" class="hint">
-          <kbd>space</kbd> change countries &middot;
-          <kbd>R</kbd> run it again &middot;
-          <kbd>esc</kbd> back to the game
-        </div>
-        <div v-else class="hint"><kbd>space</kbd> to play again</div>
-      </div>
+      <FinalSummary
+        v-if="run.over && !selecting"
+        :cities="cities"
+        :max-score="maxScore"
+        :percent="percent"
+        :scored="run.scored"
+        :studying="studying"
+        :total="total"
+      />
     </div>
   </div>
 </template>
@@ -410,296 +340,5 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown))
   inset: 0;
   z-index: 2;
   pointer-events: none;
-}
-
-.panel {
-  padding: 12px 18px;
-  border-radius: 8px;
-  background: rgba(0, 0, 0, 0.6);
-}
-
-kbd {
-  padding: 1px 5px;
-  border: 1px solid rgba(255, 255, 255, 0.35);
-  border-radius: 4px;
-  font: inherit;
-  font-size: 0.9em;
-}
-
-/* --- the ask ------------------------------------------------------------- */
-
-/* The ask rides over whatever imagery the round happens to land on, and a
-   text-shadow alone loses to snow, salt flats and cloud. It takes the same
-   panel as the footers instead -- the two are read in the same glance, so
-   backing only one of them would read as an accident. */
-.prompt {
-  position: absolute;
-  top: 16px;
-  left: 50%;
-  transform: translateX(-50%);
-  text-align: center;
-}
-
-.meta {
-  font-size: 12px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: #9aa;
-}
-
-.multiplier {
-  margin-left: 6px;
-  color: #e8c46a;
-}
-
-.city {
-  margin: 2px 0 0;
-  font-size: 34px;
-  font-weight: 600;
-  letter-spacing: 0.01em;
-}
-
-.country {
-  font-size: 14px;
-  color: #9aa;
-}
-
-/* Sovereignty footnote for places that aren't countries. Dimmer than the map
-   label above it, because it explains the answer rather than being it. */
-.note {
-  margin-top: 1px;
-  font-size: 11px;
-  font-style: italic;
-  color: #7b8a8a;
-}
-
-/* --- running total ------------------------------------------------------- */
-
-.tally {
-  position: absolute;
-  top: 18px;
-  right: 18px;
-  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.9);
-}
-
-.tally-score {
-  font-size: 28px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
-
-.tally-max {
-  margin-left: 3px;
-  font-size: 14px;
-  color: #9aa;
-}
-
-/* --- round outcome ------------------------------------------------------- */
-
-.aim,
-.result {
-  position: absolute;
-  bottom: 26px;
-  left: 50%;
-  transform: translateX(-50%);
-  text-align: center;
-}
-
-.aim {
-  color: #cdd;
-  font-size: 14px;
-}
-
-.result {
-  min-width: 230px;
-}
-
-.row {
-  display: flex;
-  justify-content: space-between;
-  gap: 22px;
-  font-size: 15px;
-  line-height: 1.7;
-}
-
-.label {
-  color: #9aa;
-}
-
-.value {
-  font-variant-numeric: tabular-nums;
-}
-
-.dim {
-  color: #9aa;
-}
-
-.hint {
-  margin-top: 8px;
-  font-size: 12px;
-  color: #8a9;
-}
-
-/* --- game over ----------------------------------------------------------- */
-
-.final {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  min-width: 300px;
-  padding: 22px 26px;
-  text-align: center;
-  background: rgba(0, 0, 0, 0.78);
-}
-
-.final-label {
-  font-size: 12px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: #9aa;
-}
-
-.final-score {
-  font-size: 46px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
-
-.final-max {
-  margin-left: 4px;
-  font-size: 16px;
-  font-weight: 400;
-  color: #9aa;
-}
-
-/* The points behind the percentage above. Kept because the breakdown under it
-   is in points and the two should add up, but muted -- it is the working, not
-   the answer. */
-.final-raw {
-  margin-top: 2px;
-  font-size: 13px;
-  color: #9aa;
-  font-variant-numeric: tabular-nums;
-}
-
-.breakdown {
-  margin: 14px 0 4px;
-  padding: 0;
-  list-style: none;
-  font-size: 14px;
-}
-
-.breakdown li {
-  display: grid;
-  grid-template-columns: 1fr auto 52px;
-  gap: 14px;
-  padding: 3px 0;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.breakdown-city {
-  text-align: left;
-}
-
-.breakdown-distance {
-  color: #9aa;
-  font-variant-numeric: tabular-nums;
-}
-
-.breakdown-points {
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-}
-
-/* --- picking countries --------------------------------------------------- */
-
-/* Wider than the round prompt because it holds a list that grows, and capped
-   so a long selection wraps into lines rather than pushing the panel off both
-   edges of the screen. */
-.picker {
-  width: min(640px, calc(100vw - 32px));
-}
-
-.hovered {
-  margin: 3px 0 1px;
-  font-size: 22px;
-  font-weight: 600;
-}
-
-/* The count is the whole reason to hover a country, so it reads as part of the
-   name rather than as a footnote under it. */
-.hovered-count {
-  margin-left: 8px;
-  font-size: 13px;
-  font-weight: 400;
-  color: #e8c46a;
-}
-
-.hovered-count.none {
-  color: #7b8a8a;
-  font-style: italic;
-}
-
-.chips {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 6px;
-  margin: 8px 0 2px;
-}
-
-/* Gold to match the outline a selected country is drawn in on the globe: the
-   chip and the border are the same fact, and picking one up should be enough
-   to recognise the other. */
-.chip {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 6px;
-  padding: 2px 9px;
-  border: 1px solid rgba(232, 196, 106, 0.45);
-  border-radius: 999px;
-  font-size: 13px;
-  color: #f0dca8;
-}
-
-.chip-count {
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-  color: #9aa;
-}
-
-.chips-empty {
-  margin: 8px 0 2px;
-  font-size: 13px;
-  font-style: italic;
-  color: #7b8a8a;
-}
-
-/* Says what mode you are in where the multiplier sits in a game, since the two
-   are the same question -- how is this city being scored. */
-.tag {
-  margin-left: 6px;
-  padding: 0 5px;
-  border-radius: 3px;
-  background: rgba(232, 196, 106, 0.16);
-  color: #e8c46a;
-}
-
-/* The one hint that has to be visible without being asked for: a mode on a key
-   nobody presses by accident is a mode nobody finds. */
-.aside {
-  margin-top: 5px;
-  font-size: 12px;
-  color: #8a9;
-}
-
-/* A study run can be thirty cities, and the breakdown lists all of them.
-   Scrolling it is worth a panel that takes the mouse -- the globe underneath
-   has nothing left to do by then. */
-.final.long {
-  max-height: 70vh;
-  overflow-y: auto;
-  pointer-events: auto;
 }
 </style>
