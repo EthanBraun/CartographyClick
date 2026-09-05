@@ -417,7 +417,7 @@ const TIERS = [
     {name: 'Basra', region: 'Iraq', lat: 30.5085, lon: 47.7804},
     {name: 'Cebu City', region: 'Philippines', lat: 10.3157, lon: 123.8854},
     {name: 'Maputo', region: 'Mozambique', lat: -25.9653, lon: 32.5892},
-    {name: 'Sharjah', region: 'United Arab Emirates', lat: 25.3342, lon: 55.4122},
+    {name: 'Sharjah', region: 'UAE', lat: 25.3342, lon: 55.4122},
     {name: 'Mérida', region: 'Yucatán, Mexico', lat: 20.9674, lon: -89.5926},
     {name: 'Chittagong', region: 'Bangladesh', lat: 22.3569, lon: 91.7832},
     {name: 'Valparaiso', region: 'Chile', lat: -33.0458, lon: -71.6197},
@@ -440,7 +440,7 @@ const TIERS = [
     {name: 'Zanzibar City', region: 'Zanzibar Archipelago, Tanzania', lat: -6.1659, lon: 39.2026},
     {name: 'Belize City', region: 'Belize', lat: 17.5046, lon: -88.1962},
     {name: 'Hamilton', region: 'Bermuda', note: 'British Overseas Territory', lat: 32.2942, lon: -64.7839},
-    {name: 'Puerto Baquerizo Moreno', region: 'Galapagos Islands', lat: -0.9017, lon: -89.6102},
+    {name: 'Puerto Baquerizo Moreno', region: 'Galapagos Islands, Ecuador', lat: -0.9017, lon: -89.6102},
   ],
   // round 5 -- 226 places: brutal -- only a local or a specialist would know
   [
@@ -486,7 +486,7 @@ const TIERS = [
     {name: 'La Plata', region: 'Buenos Aires, Argentina', lat: -34.9215, lon: -57.9545},
     {name: 'Malacca', region: 'Malaysia', lat: 2.1917, lon: 102.2551},
     {name: 'Freetown', region: 'Sierra Leone', lat: 8.4844, lon: -13.2344},
-    {name: 'Unalaska', region: 'Alaska', lat: 53.8826, lon: -166.5313},
+    {name: 'Unalaska', region: 'Alaska, United States', lat: 53.8826, lon: -166.5313},
     {name: 'Culiacán', region: 'Sinaloa, Mexico', lat: 24.8091, lon: -107.394},
     {name: 'Tabriz', region: 'Iran', lat: 38.0962, lon: 46.2738},
     {name: 'Juba', region: 'South Sudan', lat: 4.8517, lon: 31.5825},
@@ -569,7 +569,7 @@ const TIERS = [
     {name: 'Nukuʻalofa', region: 'Tonga', lat: -21.1333, lon: -175.2},
     {name: 'Honiara', region: 'Solomon Islands', lat: -9.4319, lon: 159.9565},
     {name: 'Belmopan', region: 'Belize', lat: 17.2534, lon: -88.7713},
-    {name: 'Goma', region: 'Democratic Republic of Congo', lat: -1.6741, lon: 29.2285},
+    {name: 'Goma', region: 'DR Congo', lat: -1.6741, lon: 29.2285},
     {name: 'Targoviste', region: 'Romania', lat: 44.925, lon: 25.456},
     {name: 'Charlotte Amalie', region: 'St Thomas, US Virgin Islands', note: 'unincorporated territory of the United States', lat: 18.3419, lon: -64.9307},
     {name: 'Maracaibo', region: 'Venezuela', lat: 10.6427, lon: -71.6125},
@@ -713,6 +713,90 @@ function countryOf(place) {
   return HOME_NATIONS.has(last) ? 'United Kingdom' : last
 }
 
+// Nor is a game most of one continent: four European capitals and Lagos is
+// a game about Europe. Two per continent leaves a five-round game at least
+// three, and the fifth round, which is largely African, somewhere to go.
+// Countries listed by the key countryOf() yields, and checked against the
+// pool below, so a relabeled entry cannot quietly fall out of the rule.
+const MAX_PER_CONTINENT = 2
+
+const CONTINENTS = {
+  Africa: [
+    'Algeria', 'Angola', 'Benin', 'Botswana', 'Burkina Faso', 'Burundi',
+    'Cameroon', 'Cape Verde', 'Central African Republic', 'Chad', 'Comoros',
+    'Congo', 'DR Congo', 'Djibouti', 'Egypt', 'Equatorial Guinea', 'Eritrea',
+    'Eswatini', 'Ethiopia', 'Gabon', 'Ghana', 'Guinea', 'Guinea-Bissau',
+    'Ivory Coast', 'Kenya', 'Lesotho', 'Liberia', 'Libya', 'Madagascar',
+    'Malawi', 'Mali', 'Mauritania', 'Mauritius', 'Morocco', 'Mozambique',
+    'Namibia', 'Niger', 'Nigeria', 'Rwanda', 'São Tomé and Príncipe',
+    'Senegal', 'Seychelles', 'Sierra Leone', 'Somalia', 'South Africa',
+    'South Sudan', 'Sudan', 'Tanzania', 'The Gambia', 'Togo', 'Tunisia',
+    'Uganda', 'Zambia', 'Zimbabwe',
+  ],
+  // The Caucasus, Turkey and Cyprus sit on the line; Cyprus goes with the
+  // EU, the other four with the Middle East.
+  Asia: [
+    'Afghanistan', 'Armenia', 'Azerbaijan', 'Bahrain', 'Bangladesh', 'Bhutan',
+    'Brunei', 'Cambodia', 'China', 'East Timor', 'Georgia', 'Hong Kong',
+    'India', 'Indonesia', 'Iran', 'Iraq', 'Israel', 'Japan', 'Jordan',
+    'Kazakhstan', 'Kuwait', 'Kyrgyzstan', 'Laos', 'Lebanon', 'Macau',
+    'Malaysia', 'Maldives', 'Mongolia', 'Myanmar', 'Nepal', 'North Korea',
+    'Oman', 'Pakistan', 'Philippines', 'Qatar', 'Saudi Arabia', 'Singapore',
+    'South Korea', 'Sri Lanka', 'Syria', 'Taiwan', 'Tajikistan', 'Thailand',
+    'Turkey', 'Turkmenistan', 'UAE', 'Uzbekistan', 'Vietnam', 'West Bank',
+    'Yemen',
+  ],
+  Europe: [
+    'Albania', 'Andorra', 'Austria', 'Belarus', 'Belgium',
+    'Bosnia and Herzegovina', 'Bulgaria', 'Crimea', 'Croatia', 'Cyprus',
+    'Czechia', 'Denmark', 'Estonia', 'Finland', 'France', 'Germany', 'Greece',
+    'Hungary', 'Iceland', 'Ireland', 'Italy', 'Kosovo', 'Latvia',
+    'Liechtenstein', 'Lithuania', 'Luxembourg', 'Madeira', 'Malta', 'Moldova',
+    'Monaco', 'Montenegro', 'Netherlands', 'North Macedonia', 'Norway',
+    'Poland', 'Portugal', 'Romania', 'Russia', 'San Marino', 'Serbia',
+    'Slovakia', 'Slovenia', 'Spain', 'Svalbard', 'Sweden', 'Switzerland',
+    'Ukraine', 'United Kingdom',
+  ],
+  // Central America and the Caribbean included.
+  'North America': [
+    'Antigua and Barbuda', 'Bahamas', 'Barbados', 'Belize', 'Bermuda',
+    'Canada', 'Costa Rica', 'Cuba', 'Curaçao', 'Dominica',
+    'Dominican Republic', 'El Salvador', 'Greenland', 'Guadeloupe',
+    'Guatemala', 'Haiti', 'Honduras', 'Jamaica', 'Mexico', 'Nicaragua',
+    'Panama', 'Puerto Rico', 'Saint Kitts and Nevis', 'Saint Lucia',
+    'Saint Vincent and the Grenadines', 'Sint Maarten', 'Trinidad and Tobago',
+    'Turks & Caicos', 'US Virgin Islands', 'United States',
+  ],
+  'South America': [
+    'Argentina', 'Bolivia', 'Brazil', 'Chile', 'Colombia', 'Ecuador',
+    'Falkland Islands', 'Guyana', 'Paraguay', 'Peru', 'Suriname', 'Uruguay',
+    'Venezuela',
+  ],
+  Oceania: [
+    'Australia', 'Fiji', 'French Polynesia', 'Guam', 'Kiribati',
+    'Marshall Islands', 'Micronesia', 'Nauru', 'New Zealand', 'Palau',
+    'Papua New Guinea', 'Samoa', 'Solomon Islands', 'Tonga', 'Tuvalu',
+    'Vanuatu',
+  ],
+}
+
+const continentByCountry = new Map()
+for (const [continent, countries] of Object.entries(CONTINENTS)) {
+  for (const country of countries) continentByCountry.set(country, continent)
+}
+
+function continentOf(place) {
+  return continentByCountry.get(countryOf(place))
+}
+
+// A country missing from the table would be its own continent to the cap
+// and never trip anything at runtime, so it is caught here instead.
+if (import.meta.env?.DEV) {
+  for (const place of ALL_PLACES) {
+    if (!continentOf(place)) console.warn(`No continent for ${place.name}, ${place.region}`)
+  }
+}
+
 // Names, not objects: this has to survive a reload.
 function loadRecent() {
   try {
@@ -738,11 +822,16 @@ function remember(roundIndex, place) {
 }
 
 // Whether a place cannot join a game given what is in it already: a repeat,
-// a second city of one country, or a spot the same click would cover.
+// a second city of one country, a third of one continent, or a spot the same
+// click would cover.
 function clashes(place, chosen) {
   const R = 6371.0088
   const rad = Math.PI / 180
   const country = countryOf(place)
+  const continent = continentOf(place)
+  if (chosen.filter((other) => continentOf(other) === continent).length >= MAX_PER_CONTINENT) {
+    return true
+  }
   return chosen.some((other) => {
     if (other.name === place.name || countryOf(other) === country) return true
     const dLat = (other.lat - place.lat) * rad
