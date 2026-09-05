@@ -140,16 +140,14 @@ const selectedCities = computed(() =>
 function onGuess(guess) {
   if (revealed.value) return
   const distanceKm = greatCircleKm(guess, city.value)
-  // What the distance alone pays, then what it pays once a guess in the right
-  // country or on the right continent has its floor -- see scoring.js. Both
-  // are kept: the panels show the lift, not just the result of it.
-  const raw = roundPoints(distanceKm)
-  const ground = sharedGround(guess, city.value)
-  const points = floorPoints(raw, ground)
+  // What the distance pays, lifted by the floor for a guess in the right
+  // country or on the right continent -- see scoring.js. Only the lifted
+  // figure is kept: the panels show points, not the floor's part in them.
+  const points = floorPoints(roundPoints(distanceKm), sharedGround(guess, city.value))
   // The multiplier is kept on the entry rather than re-derived: awarded / points
   // is undefined on a zero-point round, and the summary shows it either way.
   const m = multiplier.value
-  run.value.result = {distanceKm, raw, ground, points, multiplier: m, awarded: points * m}
+  run.value.result = {distanceKm, points, multiplier: m, awarded: points * m}
   run.value.scored.push(run.value.result)
 }
 
