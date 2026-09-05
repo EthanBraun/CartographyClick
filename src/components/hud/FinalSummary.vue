@@ -26,7 +26,10 @@ defineProps({
     <div v-if="studying" class="final-raw">{{ total }} / {{ maxScore }}</div>
     <ol class="breakdown">
       <li v-for="(entry, i) in scored" :key="i">
-        <span class="breakdown-city">{{ cities[i].name }}</span>
+        <span class="breakdown-city">
+          {{ cities[i].name }}
+          <span class="breakdown-region">{{ cities[i].region }}</span>
+        </span>
         <span class="breakdown-distance">{{ formatKm(entry.distanceKm) }}</span>
         <!-- A study run is flat, so the working would be "82 x1" thirty times. -->
         <span v-if="!studying" class="breakdown-working">
@@ -105,6 +108,7 @@ defineProps({
 .breakdown li {
   display: grid;
   grid-template-columns: 1fr auto auto 52px;
+  align-items: center;
   gap: 14px;
   padding: 3px 0;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
@@ -112,6 +116,16 @@ defineProps({
 
 .breakdown-city {
   text-align: left;
+}
+
+/* The country under the name, as the prompt had it. The row is taller for it,
+   which is fine at five rows and tolerable at thirty, since a study run's card
+   already scrolls. Kept clear of the name's line so a long name and a long
+   country -- "Simpson Bay, Sint Maarten" -- never share one. */
+.breakdown-region {
+  display: block;
+  font-size: 12px;
+  color: #9aa;
 }
 
 .breakdown-distance {
