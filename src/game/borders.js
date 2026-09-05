@@ -10,6 +10,8 @@
 // a handful of candidates. Loading is therefore just a JSON parse, and the
 // ~845,000 vertices in the pair never all exist as numbers at once.
 
+import {continentOf} from './continents'
+
 const PRECISION = 1e4
 
 // Roughly, at the equator. Only used to put the fallback below in units that
@@ -96,6 +98,24 @@ export function countryAt(lat, lon) {
   if (!countries) return null
   const feature = locate(countries, lat, lon)
   return feature ? {code: feature.a, name: countryName(feature.n)} : null
+}
+
+// What a guess has in common with its target: 'country' for a tap inside the
+// target's own country, 'continent' for one on the same continent, and null
+// for anything else -- open ocean, another continent, or a guess made before
+// loadBorders() has settled. The scoring floors pay for the first two.
+//
+// Both ends go through the polygons, the target included, so the two answers
+// come from one map: a tap in Guadeloupe for a Paris target is France on both
+// sides, whatever the pool calls Basse-Terre. The continent is read off the
+// polygon's name, which is why game/continents lists Natural Earth's names.
+export function sharedGround(guess, target) {
+  const tapped = countryAt(guess.lat, guess.lon)
+  const home = countryAt(target.lat, target.lon)
+  if (!tapped || !home) return null
+  if (tapped.code === home.code) return 'country'
+  const continent = continentOf(tapped.name)
+  return continent && continent === continentOf(home.name) ? 'continent' : null
 }
 
 // Decoded rings for one country, flat [lon, lat, ...] apiece. Kept apart from

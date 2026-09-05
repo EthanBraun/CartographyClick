@@ -41,6 +41,8 @@
 // Scotland" says more than "Aberdeen, the UK"; otherwise it is the resolved
 // country. `note` covers the few whose region is not a sovereign state.
 
+import {continentOf} from './continents'
+
 const TIERS = [
   // round 1 -- 48 places: global icons -- anyone with a TV can place them
   [
@@ -716,84 +718,20 @@ function countryOf(place) {
 // Nor is a game most of one continent: four European capitals and Lagos is
 // a game about Europe. Two per continent leaves a five-round game at least
 // three, and the fifth round, which is largely African, somewhere to go.
-// Countries listed by the key countryOf() yields, and checked against the
-// pool below, so a relabeled entry cannot quietly fall out of the rule.
+// The table is game/continents', keyed by the names countryOf() yields and
+// checked against the pool below, so a relabeled entry cannot quietly fall
+// out of the rule.
 const MAX_PER_CONTINENT = 2
 
-const CONTINENTS = {
-  Africa: [
-    'Algeria', 'Angola', 'Benin', 'Botswana', 'Burkina Faso', 'Burundi',
-    'Cameroon', 'Cape Verde', 'Central African Republic', 'Chad', 'Comoros',
-    'Congo', 'DR Congo', 'Djibouti', 'Egypt', 'Equatorial Guinea', 'Eritrea',
-    'Eswatini', 'Ethiopia', 'Gabon', 'Ghana', 'Guinea', 'Guinea-Bissau',
-    'Ivory Coast', 'Kenya', 'Lesotho', 'Liberia', 'Libya', 'Madagascar',
-    'Malawi', 'Mali', 'Mauritania', 'Mauritius', 'Morocco', 'Mozambique',
-    'Namibia', 'Niger', 'Nigeria', 'Rwanda', 'São Tomé and Príncipe',
-    'Senegal', 'Seychelles', 'Sierra Leone', 'Somalia', 'South Africa',
-    'South Sudan', 'Sudan', 'Tanzania', 'The Gambia', 'Togo', 'Tunisia',
-    'Uganda', 'Zambia', 'Zimbabwe',
-  ],
-  // The Caucasus, Turkey and Cyprus sit on the line; Cyprus goes with the
-  // EU, the other four with the Middle East.
-  Asia: [
-    'Afghanistan', 'Armenia', 'Azerbaijan', 'Bahrain', 'Bangladesh', 'Bhutan',
-    'Brunei', 'Cambodia', 'China', 'East Timor', 'Georgia', 'Hong Kong',
-    'India', 'Indonesia', 'Iran', 'Iraq', 'Israel', 'Japan', 'Jordan',
-    'Kazakhstan', 'Kuwait', 'Kyrgyzstan', 'Laos', 'Lebanon', 'Macau',
-    'Malaysia', 'Maldives', 'Mongolia', 'Myanmar', 'Nepal', 'North Korea',
-    'Oman', 'Pakistan', 'Philippines', 'Qatar', 'Saudi Arabia', 'Singapore',
-    'South Korea', 'Sri Lanka', 'Syria', 'Taiwan', 'Tajikistan', 'Thailand',
-    'Turkey', 'Turkmenistan', 'UAE', 'Uzbekistan', 'Vietnam', 'West Bank',
-    'Yemen',
-  ],
-  Europe: [
-    'Albania', 'Andorra', 'Austria', 'Belarus', 'Belgium',
-    'Bosnia and Herzegovina', 'Bulgaria', 'Crimea', 'Croatia', 'Cyprus',
-    'Czechia', 'Denmark', 'Estonia', 'Finland', 'France', 'Germany', 'Greece',
-    'Hungary', 'Iceland', 'Ireland', 'Italy', 'Kosovo', 'Latvia',
-    'Liechtenstein', 'Lithuania', 'Luxembourg', 'Madeira', 'Malta', 'Moldova',
-    'Monaco', 'Montenegro', 'Netherlands', 'North Macedonia', 'Norway',
-    'Poland', 'Portugal', 'Romania', 'Russia', 'San Marino', 'Serbia',
-    'Slovakia', 'Slovenia', 'Spain', 'Svalbard', 'Sweden', 'Switzerland',
-    'Ukraine', 'United Kingdom',
-  ],
-  // Central America and the Caribbean included.
-  'North America': [
-    'Antigua and Barbuda', 'Bahamas', 'Barbados', 'Belize', 'Bermuda',
-    'Canada', 'Costa Rica', 'Cuba', 'Curaçao', 'Dominica',
-    'Dominican Republic', 'El Salvador', 'Greenland', 'Guadeloupe',
-    'Guatemala', 'Haiti', 'Honduras', 'Jamaica', 'Mexico', 'Nicaragua',
-    'Panama', 'Puerto Rico', 'Saint Kitts and Nevis', 'Saint Lucia',
-    'Saint Vincent and the Grenadines', 'Sint Maarten', 'Trinidad and Tobago',
-    'Turks & Caicos', 'US Virgin Islands', 'United States',
-  ],
-  'South America': [
-    'Argentina', 'Bolivia', 'Brazil', 'Chile', 'Colombia', 'Ecuador',
-    'Falkland Islands', 'Guyana', 'Paraguay', 'Peru', 'Suriname', 'Uruguay',
-    'Venezuela',
-  ],
-  Oceania: [
-    'Australia', 'Fiji', 'French Polynesia', 'Guam', 'Kiribati',
-    'Marshall Islands', 'Micronesia', 'Nauru', 'New Zealand', 'Palau',
-    'Papua New Guinea', 'Samoa', 'Solomon Islands', 'Tonga', 'Tuvalu',
-    'Vanuatu',
-  ],
-}
-
-const continentByCountry = new Map()
-for (const [continent, countries] of Object.entries(CONTINENTS)) {
-  for (const country of countries) continentByCountry.set(country, continent)
-}
-
-function continentOf(place) {
-  return continentByCountry.get(countryOf(place))
+function continentOfPlace(place) {
+  return continentOf(countryOf(place))
 }
 
 // A country missing from the table would be its own continent to the cap
 // and never trip anything at runtime, so it is caught here instead.
 if (import.meta.env?.DEV) {
   for (const place of ALL_PLACES) {
-    if (!continentOf(place)) console.warn(`No continent for ${place.name}, ${place.region}`)
+    if (!continentOfPlace(place)) console.warn(`No continent for ${place.name}, ${place.region}`)
   }
 }
 
@@ -828,8 +766,8 @@ function clashes(place, chosen) {
   const R = 6371.0088
   const rad = Math.PI / 180
   const country = countryOf(place)
-  const continent = continentOf(place)
-  if (chosen.filter((other) => continentOf(other) === continent).length >= MAX_PER_CONTINENT) {
+  const continent = continentOfPlace(place)
+  if (chosen.filter((other) => continentOfPlace(other) === continent).length >= MAX_PER_CONTINENT) {
     return true
   }
   return chosen.some((other) => {

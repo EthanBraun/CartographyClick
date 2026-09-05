@@ -9,7 +9,8 @@ defineProps({
   percent: {type: Number, required: true},
   total: {type: Number, required: true},
   maxScore: {type: Number, required: true},
-  // One {distanceKm, points, multiplier, awarded} per round played, in order.
+  // One {distanceKm, raw, ground, points, multiplier, awarded} per round
+  // played, in order.
   scored: {type: Array, required: true},
   // The run's cities, in the same order.
   cities: {type: Array, required: true},
@@ -30,7 +31,13 @@ defineProps({
           {{ cities[i].name }}
           <span class="breakdown-region">{{ cities[i].region }}</span>
         </span>
-        <span class="breakdown-distance">{{ formatKm(entry.distanceKm) }}</span>
+        <span class="breakdown-distance">
+          {{ formatKm(entry.distanceKm) }}
+          <!-- Same test as the round footer: shown only where the floor paid. -->
+          <span v-if="entry.points > entry.raw" class="breakdown-ground">
+            {{ entry.ground === 'country' ? 'right country' : 'right continent' }}
+          </span>
+        </span>
         <!-- A study run is flat, so the working would be "82 x1" thirty times. -->
         <span v-if="!studying" class="breakdown-working">
           {{ entry.points }}<span class="mult" :class="'mult-' + entry.multiplier">&times;{{ entry.multiplier }}</span>
@@ -131,6 +138,14 @@ defineProps({
 .breakdown-distance {
   color: #9aa;
   font-variant-numeric: tabular-nums;
+}
+
+/* Sits on the region's line, so a floored row is two lines like every other
+   and the points beside it are the floored ones without saying so twice. */
+.breakdown-ground {
+  display: block;
+  font-size: 12px;
+  color: #9ccf8f;
 }
 
 /* The 0-100 score and its multiplier, so the awarded column reads as a

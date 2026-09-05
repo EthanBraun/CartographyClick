@@ -27,6 +27,23 @@ const FALLOFF_RATE = 3.5
 const ZERO_KM = 16_750
 const CONSOLATION = 0.01
 
+// The floors, also maptap.gg's, from its data/scoring-config.json as of
+// 2026-06-19 and applied as its game page does:
+//
+//   boosted = floor + (points / 100) * (100 - floor)
+//   final = round(max(points, min(boosted, 80)))
+//
+// A guess inside the target's country is rescaled to start from 25 instead of
+// 0, one on its continent from 10, and either lift is capped at 80 so knowing
+// the country never outscores a genuinely close tap. The rescale fades as the
+// tap improves: a raw 0 in the right country pays 25, a raw 40 pays 55, and
+// anything already past the cap is left alone. In practice the country floor
+// is insurance for the big countries -- inside a small one the tap is already
+// within a few hundred km and scoring in the 80s -- and the continent floor is
+// a few points of consolation.
+const FLOORS = {country: 25, continent: 10}
+const FLOOR_CAP = 80
+
 // Five cities, weighted 1-1-2-3-3, so a flawless game is exactly 1000.
 export const ROUND_MULTIPLIERS = [1, 1, 2, 3, 3]
 export const ROUND_MAX = 100
@@ -50,4 +67,14 @@ export function roundPoints(distanceKm) {
     return Math.round(ROUND_MAX * (distanceKm < ZERO_KM ? CONSOLATION : 0))
   }
   return Math.round(ROUND_MAX * Math.exp(-(distanceKm / FALLOFF_KM) * FALLOFF_RATE))
+}
+
+// The 0-100 for a round once the floor is in: `ground` is what the guess
+// shares with the target, 'country', 'continent' or null, as game/borders'
+// sharedGround() reports it.
+export function floorPoints(points, ground) {
+  const floor = FLOORS[ground]
+  if (!floor) return points
+  const boosted = floor + (points / ROUND_MAX) * (ROUND_MAX - floor)
+  return Math.round(Math.max(points, Math.min(boosted, FLOOR_CAP)))
 }

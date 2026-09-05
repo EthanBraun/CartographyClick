@@ -12,12 +12,14 @@ import RoundResult from './components/hud/RoundResult.vue'
 import Tally from './components/hud/Tally.vue'
 import TouchBar from './components/hud/TouchBar.vue'
 import './components/hud/hud.css'
+import {sharedGround} from './game/borders'
 import {pickRound} from './game/cities'
 import {cityCount, loadCountryIndex, studyRun} from './game/study'
 import {
   GAME_MAX,
   ROUND_MAX,
   ROUND_MULTIPLIERS,
+  floorPoints,
   greatCircleKm,
   roundPoints,
 } from './game/scoring'
@@ -138,11 +140,16 @@ const selectedCities = computed(() =>
 function onGuess(guess) {
   if (revealed.value) return
   const distanceKm = greatCircleKm(guess, city.value)
-  const points = roundPoints(distanceKm)
+  // What the distance alone pays, then what it pays once a guess in the right
+  // country or on the right continent has its floor -- see scoring.js. Both
+  // are kept: the panels show the lift, not just the result of it.
+  const raw = roundPoints(distanceKm)
+  const ground = sharedGround(guess, city.value)
+  const points = floorPoints(raw, ground)
   // The multiplier is kept on the entry rather than re-derived: awarded / points
   // is undefined on a zero-point round, and the summary shows it either way.
   const m = multiplier.value
-  run.value.result = {distanceKm, points, multiplier: m, awarded: points * m}
+  run.value.result = {distanceKm, raw, ground, points, multiplier: m, awarded: points * m}
   run.value.scored.push(run.value.result)
 }
 

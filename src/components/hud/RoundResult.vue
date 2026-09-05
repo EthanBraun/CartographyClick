@@ -3,7 +3,7 @@
 import {formatKm} from './format'
 
 defineProps({
-  // {distanceKm, points, multiplier, awarded}
+  // {distanceKm, raw, ground, points, multiplier, awarded}
   result: {type: Object, required: true},
   multiplier: {type: Number, default: 1},
 })
@@ -14,6 +14,13 @@ defineProps({
     <div class="row">
       <span class="label">off by</span>
       <span class="value">{{ formatKm(result.distanceKm) }}</span>
+    </div>
+    <!-- Only when the floor actually moved the score: a tap in the right
+         country that was close anyway earned its points on distance, and
+         saying "right country" under it would read as a consolation. -->
+    <div v-if="result.points > result.raw" class="row">
+      <span class="label">{{ result.ground === 'country' ? 'right country' : 'right continent' }}</span>
+      <span class="value lift">+{{ result.points - result.raw }}</span>
     </div>
     <div class="row">
       <span class="label">points</span>
@@ -55,5 +62,10 @@ defineProps({
 
 .dim {
   color: #9aa;
+}
+
+/* The same muted green as a x1 multiplier: a tier, not a verdict. */
+.lift {
+  color: #9ccf8f;
 }
 </style>
