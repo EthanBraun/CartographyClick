@@ -575,7 +575,7 @@ const TIERS = [
     {name: 'Maracaibo', region: 'Venezuela', lat: 10.6427, lon: -71.6125},
     {name: 'Jalalabad', region: 'Afghanistan', lat: 34.4341, lon: 70.4477},
     {name: 'Port Vila', region: 'Vanuatu', lat: -17.7333, lon: 168.3167},
-    {name: 'Kisangani', region: 'Democratic Republic of the Congo', lat: 0.5153, lon: 25.191},
+    {name: 'Kisangani', region: 'DR Congo', lat: 0.5153, lon: 25.191},
     {name: 'Funafuti', region: 'Tuvalu', lat: -8.5167, lon: 179.2167},
     {name: 'Moroni', region: 'Comoros', lat: -11.7172, lon: 43.2473},
     {name: 'Yaren', region: 'Nauru', lat: -0.5477, lon: 166.9209},
@@ -659,7 +659,7 @@ const TIERS = [
     {name: 'Bo', region: 'Sierra Leone', lat: 7.9647, lon: -11.7383},
     {name: 'Touba', region: 'Senegal', lat: 14.8623, lon: -15.8753},
     {name: 'Wau', region: 'South Sudan', lat: 7.7027, lon: 28.0032},
-    {name: 'Kananga', region: 'Democratic Republic of the Congo', lat: -5.8962, lon: 22.4166},
+    {name: 'Kananga', region: 'DR Congo', lat: -5.8962, lon: 22.4166},
     {name: 'Linden', region: 'Guyana', lat: 6.0019, lon: -58.2989},
     {name: 'Riffa', region: 'Bahrain', lat: 26.1224, lon: 50.562},
     {name: 'Kankan', region: 'Guinea', lat: 10.3854, lon: -9.3055},
@@ -692,6 +692,27 @@ const RECENT_KEY = 'cartographyclick.recent.v3'
 // Lebanon are fine; two spellings of one city are not).
 const MIN_SEPARATION_KM = 25
 
+// One game also never asks for two cities of one country: Berlin and then
+// Munich is a game about Germany, not the world. The country is read off the
+// label, whose last part is the country wherever the source named a
+// subdivision -- "Guangdong, China". Two exceptions each way.
+//
+// Overseas pieces labeled by their parent are their own thing here, since
+// Hong Kong alongside Shanghai is not the repetition the rule is for. The
+// rest of the territories -- Puerto Rico, Greenland, Curaçao -- already carry
+// their own label and need no help.
+const APART = new Set(['Hong Kong', 'Macau', 'Svalbard', 'Guadeloupe', 'Madeira'])
+// The home nations are labeled apart because "Aberdeen, Scotland" is the
+// better prompt, but London and then Glasgow is exactly the pair to stop.
+const HOME_NATIONS = new Set(['England', 'Scotland', 'Wales', 'Northern Ireland'])
+
+function countryOf(place) {
+  const parts = place.region.split(', ')
+  if (parts.length > 1 && APART.has(parts[0])) return parts[0]
+  const last = parts[parts.length - 1]
+  return HOME_NATIONS.has(last) ? 'United Kingdom' : last
+}
+
 // Names, not objects: this has to survive a reload.
 function loadRecent() {
   try {
@@ -716,11 +737,14 @@ function remember(roundIndex, place) {
   }
 }
 
-function tooClose(place, chosen) {
+// Whether a place cannot join a game given what is in it already: a repeat,
+// a second city of one country, or a spot the same click would cover.
+function clashes(place, chosen) {
   const R = 6371.0088
   const rad = Math.PI / 180
+  const country = countryOf(place)
   return chosen.some((other) => {
-    if (other.name === place.name) return true
+    if (other.name === place.name || countryOf(other) === country) return true
     const dLat = (other.lat - place.lat) * rad
     const dLon = (other.lon - place.lon) * rad
     const h = Math.sin(dLat / 2) ** 2 +
@@ -730,7 +754,7 @@ function tooClose(place, chosen) {
 }
 
 // One place per round, most recognizable first, skipping whatever came up
-// recently and anything that would land on a spot this game already uses.
+// recently and anything that clashes with what this game already asks for.
 export function pickRound() {
   const chosen = []
   TIERS.forEach((tier, i) => {
@@ -738,12 +762,12 @@ export function pickRound() {
     // `fresh` only empties if a round's pool is smaller than its own window,
     // which the cap in remember() prevents -- but fall back rather than fail.
     const pool = fresh.length ? fresh : tier
-    let place = pool[Math.floor(Math.random() * pool.length)]
-    // Rejection sampling: collisions are rare enough that a bounded retry beats
-    // filtering the whole pool by distance on every draw.
-    for (let tries = 0; tries < 25 && tooClose(place, chosen); tries++) {
-      place = pool[Math.floor(Math.random() * pool.length)]
-    }
+    // Filtered rather than redrawn on a clash: a fifth of round 1 is the
+    // United States, so a bounded retry could give up and let a pair
+    // through, and five passes over a pool this size cost nothing.
+    const open = pool.filter((place) => !clashes(place, chosen))
+    const from = open.length ? open : pool
+    const place = from[Math.floor(Math.random() * from.length)]
     remember(i, place)
     chosen.push(place)
   })
