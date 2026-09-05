@@ -118,6 +118,92 @@ export function sharedGround(guess, target) {
   return continent && continent === continentOf(home.name) ? 'continent' : null
 }
 
+// How far from a country's main landmass another piece of it can be and still
+// be framed with it. Keeps Corsica with France and Hokkaido with Honshu, and
+// leaves Guadeloupe, Hawaii, Easter Island and Svalbard to their own views.
+const CLUSTER_KM = 2000
+
+// The ground a study run opens each of a country's cities over: the country's
+// largest landmass and the rest of it within CLUSTER_KM, as [west, south,
+// east, north] in degrees. West may exceed east where the ground crosses the
+// antimeridian, which is how Cesium's Rectangle reads it. Null before
+// loadBorders() has settled or off any country.
+//
+// Not the feature's own box: France's runs from Guadeloupe to Réunion and
+// Russia's the whole way round, so framing that would frame an ocean. And
+// built from the country, not from the city, deliberately: the same view for
+// every city of a country tells the player nothing about which island this
+// one is on, which framing the city's own landmass would.
+export function countryExtentAt(lat, lon) {
+  if (!countries) return null
+  const feature = locate(countries, lat, lon)
+  if (!feature) return null
+
+  const boxes = feature.p.map((polygon) => ringBox(decodeRing(polygon[0])))
+  const main = boxes.reduce((a, b) => (b.area > a.area ? b : a))
+  const home = center(main)
+  const extent = {west: main.west, south: main.south, east: main.east, north: main.north}
+  for (const box of boxes) {
+    if (box === main || spanKm(home, center(box)) > CLUSTER_KM) continue
+    // Measured the short way round from the main landmass, so New Zealand's
+    // Chatham Islands at -176 join the South Island at 170 as 184 and not as
+    // the whole world in between.
+    const turn = center(box).lon - home.lon
+    const shift = turn > 180 ? -360 : turn < -180 ? 360 : 0
+    extent.west = Math.min(extent.west, box.west + shift)
+    extent.east = Math.max(extent.east, box.east + shift)
+    extent.south = Math.min(extent.south, box.south)
+    extent.north = Math.max(extent.north, box.north)
+  }
+  // Back into -180..180. Where the ground crosses the antimeridian the east
+  // edge comes round to below the west one, which is Cesium's own notation.
+  const wrap = (x) => ((((x + 180) % 360) + 360) % 360) - 180
+  return [wrap(extent.west), extent.south, wrap(extent.east), extent.north]
+}
+
+// A ring's bounding box, read in whichever longitude frame makes it narrower:
+// a ring across the antimeridian spans 170..190 and not -180..180.
+function ringBox(ring) {
+  const box = (shift) => {
+    let west = Infinity
+    let east = -Infinity
+    let south = Infinity
+    let north = -Infinity
+    for (let i = 0; i < ring.length; i += 2) {
+      const x = shift && ring[i] < 0 ? ring[i] + 360 : ring[i]
+      west = Math.min(west, x)
+      east = Math.max(east, x)
+      south = Math.min(south, ring[i + 1])
+      north = Math.max(north, ring[i + 1])
+    }
+    const midLat = ((south + north) / 2) * (Math.PI / 180)
+    return {
+      west, east, south, north,
+      area: (east - west) * Math.cos(midLat) * (north - south),
+    }
+  }
+  const plain = box(false)
+  const wrapped = box(true)
+  return wrapped.east - wrapped.west < plain.east - plain.west ? wrapped : plain
+}
+
+// A box's middle, in degrees.
+function center(box) {
+  return {lat: (box.south + box.north) / 2, lon: (box.west + box.east) / 2}
+}
+
+// Great-circle distance between two {lat, lon} in degrees, in km.
+function spanKm(p, q) {
+  const rad = Math.PI / 180
+  const R = 6371.0088
+  const dLat = (q.lat - p.lat) * rad
+  const dLon = (q.lon - p.lon) * rad
+  const h =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(p.lat * rad) * Math.cos(q.lat * rad) * Math.sin(dLon / 2) ** 2
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)))
+}
+
 // Decoded rings for one country, flat [lon, lat, ...] apiece. Kept apart from
 // countryAt because a hover happens every time the cursor crosses a border and
 // has no business decoding Canada's 412 rings to answer "which country".

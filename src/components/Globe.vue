@@ -5,10 +5,11 @@
 // What is drawn, how it is built and where the camera flies all live there.
 import {computed, onBeforeUnmount, onMounted, ref, watch} from 'vue'
 import * as Cesium from 'cesium'
-import {loadBorders, outlineFor} from '../game/borders'
+import {countryExtentAt, loadBorders, outlineFor} from '../game/borders'
 import {
   applyMinimumZoom,
   captureView,
+  flyToGround,
   flyToReveal,
   flyToSelect,
   liftForNextRound,
@@ -42,6 +43,9 @@ const props = defineProps({
   // True once the run's last city has been revealed and the score is up. The
   // globe pulls out to the whole planet and turns slowly behind the card.
   over: {type: Boolean, default: false},
+  // True for a study run, where each city opens over its country rather than
+  // over the whole planet -- see clearRound().
+  studying: {type: Boolean, default: false},
   // True while the globe is being used to pick countries instead of to play a
   // round. Select mode reuses all of this -- the same camera, the same F, the
   // same outline builder -- so it is a flag on this component rather than a
@@ -185,16 +189,24 @@ async function revealBorders() {
   if (outline) markers.outline(outline)
 }
 
-// Close the round out and pull back to the whole globe. `restarting` marks a
-// new game, where the round that just finished is thrown away with the rest of
-// the history rather than joining it.
+// Close the round out and pull back for the next city: to the whole globe in
+// a game, and in a study run to the country of the city coming up, which the
+// prompt names anyway. `restarting` marks a new game, where the round that
+// just finished is thrown away with the rest of the history rather than
+// joining it.
 function clearRound(restarting) {
   if (!live()) return
   if (restarting) markers.clear()
   else markers.retire()
   markers.clearOutlines()
   endLift()
-  stopLift = liftForNextRound(viewer)
+  // The borders can still be loading on a study run's first city, or the
+  // city can sit off every polygon; either way the game's lift stands in.
+  const ground = props.studying && props.target
+    ? countryExtentAt(props.target.lat, props.target.lon)
+    : null
+  if (ground) flyToGround(viewer, ground)
+  else stopLift = liftForNextRound(viewer)
 }
 
 function endLift() {

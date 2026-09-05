@@ -322,6 +322,7 @@ onBeforeUnmount(() => {
       :round="round"
       :selected="selection.map((country) => country.code)"
       :selecting="selecting"
+      :studying="studying"
       :target="city"
       :touch="touch"
       @guess="onGuess"

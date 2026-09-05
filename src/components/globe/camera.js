@@ -28,6 +28,16 @@ export const METERS_PER_KM = 1000
 const NEXT_ROUND_HEIGHT = 14_000_000
 const NEXT_ROUND_FLIGHT_SECONDS = 2.4
 
+// A study run opens each city over its country instead: the prompt names the
+// country, so the player was going to zoom straight back to it, and a climb
+// to the whole planet in between was a climb they had to undo every city.
+// Framed with a margin so the border is not the edge of the screen, and never
+// tighter than a few degrees, so Singapore opens on the strait and not on
+// the island. Where the ground is big -- Russia, Canada -- this comes out
+// higher than the game's own lift, which is what fitting it means.
+const GROUND_PADDING = 1.15
+const GROUND_MIN_RADIANS = Cesium.Math.toRadians(1.5)
+
 // Whole-globe framing to pick countries from. Far enough out that a country is
 // a thing you can point at, and level, since picking is done off shape.
 const SELECT_HEIGHT = 20_000_000
@@ -252,6 +262,37 @@ export function liftForNextRound(viewer) {
   // stops it, and either may come later than the other.
   const stop = () => removeTick()
   return stop
+}
+
+// Fly to frame a country's ground, north-up and straight down, for the next
+// city of a study run. `extent` is [west, south, east, north] in degrees as
+// game/borders' countryExtentAt() gives it, with west past east where the
+// ground crosses the antimeridian.
+export function flyToGround(viewer, [west, south, east, north]) {
+  const {camera} = viewer
+  // A reveal flight still in the air would fight this one; this one wins.
+  camera.cancelFlight()
+  const ground = Cesium.Rectangle.fromDegrees(west, south, east, north)
+  const middle = Cesium.Rectangle.center(ground)
+  const halfWidth = Math.max(
+    (Cesium.Rectangle.computeWidth(ground) * GROUND_PADDING) / 2,
+    GROUND_MIN_RADIANS,
+  )
+  const halfHeight = Math.max(
+    (Cesium.Rectangle.computeHeight(ground) * GROUND_PADDING) / 2,
+    GROUND_MIN_RADIANS,
+  )
+  const lat = (x) => Cesium.Math.clamp(x, -Cesium.Math.PI_OVER_TWO, Cesium.Math.PI_OVER_TWO)
+  camera.flyTo({
+    destination: new Cesium.Rectangle(
+      Cesium.Math.negativePiToPi(middle.longitude - halfWidth),
+      lat(middle.latitude - halfHeight),
+      Cesium.Math.negativePiToPi(middle.longitude + halfWidth),
+      lat(middle.latitude + halfHeight),
+    ),
+    orientation: {heading: 0, pitch: -Cesium.Math.PI_OVER_TWO, roll: 0},
+    duration: NEXT_ROUND_FLIGHT_SECONDS,
+  })
 }
 
 // Pull out to where countries are things you can point at, holding whatever
