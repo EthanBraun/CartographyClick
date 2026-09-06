@@ -42,13 +42,15 @@ defineEmits(['commit', 'advance', 'restart'])
 }
 
 /* The HUD lets everything through to the globe; the buttons are the one
-   exception. touch-action stops a quick second tap from zooming the page. */
+   exception. touch-action stops a quick second tap from zooming the page.
+   The backing is the panels' dark one, not a frosted white -- white text on
+   a white tint vanishes over the Sahara and other bright imagery. */
 .bar button {
   min-height: 44px;
   padding: 0 22px;
-  border: 1px solid rgba(255, 255, 255, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.5);
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.14);
+  background: rgba(0, 0, 0, 0.6);
   color: #fff;
   font: inherit;
   font-size: 15px;
@@ -60,6 +62,6 @@ defineEmits(['commit', 'advance', 'restart'])
 }
 
 .bar button:active {
-  background: rgba(255, 255, 255, 0.32);
+  background: rgba(70, 70, 70, 0.7);
 }
 </style>
