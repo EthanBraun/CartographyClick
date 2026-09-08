@@ -780,8 +780,49 @@ function clashes(place, chosen) {
   })
 }
 
-// One place per round, most recognizable first, skipping whatever came up
-// recently and anything that clashes with what this game already asks for.
+// A game is named by a share code: the draw itself, written down. The five
+// cities are their positions in their tiers, packed as one mixed-radix
+// number -- round 5's index in the units place, round 1's at the top -- and
+// written in base 36, digits and lower-case letters. The tiers multiply out
+// to some fourteen billion games, and 36^7 is the first power past that, so
+// a code is seven characters and every draw has exactly one. Codes are only
+// as stable as the pool's order: re-tiering or inserting a city silently
+// turns every code that was ever shared into a different game.
+const SIZES = TIERS.map((tier) => tier.length)
+const GAMES = SIZES.reduce((product, size) => product * size, 1)
+export const CODE_LENGTH = Math.ceil(Math.log(GAMES) / Math.log(36))
+
+function encode(cities) {
+  let value = 0
+  cities.forEach((place, i) => {
+    value = value * SIZES[i] + TIERS[i].indexOf(place)
+  })
+  return value.toString(36).padStart(CODE_LENGTH, '0')
+}
+
+function decode(code) {
+  let value = parseInt(code, 36)
+  const cities = []
+  for (let i = SIZES.length - 1; i >= 0; i--) {
+    cities.unshift(TIERS[i][value % SIZES[i]])
+    value = Math.floor(value / SIZES[i])
+  }
+  return cities
+}
+
+function keep(cities) {
+  cities.forEach((place, i) => remember(i, place))
+  try {
+    localStorage.setItem(RECENT_KEY, JSON.stringify(recent))
+  } catch {
+    // Not persisting is survivable; the in-memory list still works this session.
+  }
+  return {code: encode(cities), cities}
+}
+
+// A fresh game, as {code, cities}: one place per round, most recognizable
+// first, skipping whatever came up recently and anything that clashes with
+// what this game already asks for.
 export function pickRound() {
   const chosen = []
   TIERS.forEach((tier, i) => {
@@ -794,14 +835,19 @@ export function pickRound() {
     // through, and five passes over a pool this size cost nothing.
     const open = pool.filter((place) => !clashes(place, chosen))
     const from = open.length ? open : pool
-    const place = from[Math.floor(Math.random() * from.length)]
-    remember(i, place)
-    chosen.push(place)
+    chosen.push(from[Math.floor(Math.random() * from.length)])
   })
-  try {
-    localStorage.setItem(RECENT_KEY, JSON.stringify(recent))
-  } catch {
-    // Not persisting is survivable; the in-memory list still works this session.
-  }
-  return chosen
+  return keep(chosen)
+}
+
+// The game a typed or linked code names, or null if it is not one: not
+// digits and letters, or a number past the last game. Lenient about case,
+// whitespace and dropped leading zeros, since it will have been read off a
+// screen or a phone. Any five cities the code spells are accepted, clashing
+// or not -- a code is a game someone was given, not a draw to be vetted.
+export function gameFromCode(text) {
+  const code = String(text ?? '').trim().toLowerCase()
+  if (!/^[0-9a-z]+$/.test(code) || code.length > CODE_LENGTH) return null
+  if (parseInt(code, 36) >= GAMES) return null
+  return keep(decode(code))
 }

@@ -1,6 +1,6 @@
 <script setup>
-// The center panel once a run is over: the score, every round under it, and
-// what to do next.
+// The center panel once a run is over: the score, every round under it, the
+// game's share code, and what to do next.
 import {formatKm} from './format'
 
 defineProps({
@@ -13,7 +13,14 @@ defineProps({
   scored: {type: Array, required: true},
   // The run's cities, in the same order.
   cities: {type: Array, required: true},
+  // The game's share code, see cities.js. A study run has none.
+  code: {type: String, default: null},
+  // Whether this game's link is on the clipboard already.
+  copied: {type: Boolean, default: false},
 })
+
+// Asks for the game's link on the clipboard.
+defineEmits(['copy'])
 </script>
 
 <template>
@@ -38,6 +45,17 @@ defineProps({
         <span class="breakdown-points">{{ entry.awarded }}</span>
       </li>
     </ol>
+    <!-- A game has a code that names it, for playing the same five cities
+         somewhere else. The code is the thing to read out; the button is for
+         when a link is the thing to send. A code comes in by link only --
+         ?game=<code> in the address, see App.vue. -->
+    <div v-if="!studying" class="share">
+      <span class="share-label">game</span>
+      <span class="code">{{ code }}</span>
+      <button type="button" class="share-copy" :disabled="copied" @click="$emit('copy')">
+        {{ copied ? 'link copied' : 'copy link' }}
+      </button>
+    </div>
     <div v-if="studying" class="hint">
       <kbd>space</kbd> change countries &middot;
       <kbd>R</kbd> run it again &middot;
@@ -66,6 +84,55 @@ defineProps({
   max-height: 70vh;
   overflow-y: auto;
   pointer-events: auto;
+}
+
+/* The code row sits under the breakdown on the same rule the rows use. */
+.share {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 6px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 13px;
+}
+
+.share-label {
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #9aa;
+}
+
+/* Monospace and spaced out so 0 and o, 1 and l, can be told apart when read
+   off a screen, and selectable on its own for the desktop way of copying. */
+.code {
+  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  pointer-events: auto;
+  user-select: all;
+}
+
+.share-copy {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #8a9;
+  font: inherit;
+  font-size: 12px;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.share-copy:disabled {
+  color: #9aa;
+  text-decoration: none;
+  cursor: default;
 }
 
 .final-label {

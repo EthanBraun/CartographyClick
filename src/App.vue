@@ -13,7 +13,7 @@ import Tally from './components/hud/Tally.vue'
 import TouchBar from './components/hud/TouchBar.vue'
 import './components/hud/hud.css'
 import {sharedGround} from './game/borders'
-import {pickRound} from './game/cities'
+import {gameFromCode, pickRound} from './game/cities'
 import {cityCount, loadCountryIndex, studyRun} from './game/study'
 import {
   GAME_MAX,
@@ -41,11 +41,50 @@ const SELECT_KEY = '`'
 // city the pool has for a set of countries, scored flat. They are the same
 // shape on purpose -- everything from the guess down treats them identically,
 // and only the two lines that build one know which is which.
-function newRun(cities, kind) {
-  return {kind, cities, index: 0, result: null, scored: [], over: false}
+function newRun(cities, kind, code = null) {
+  return {kind, cities, code, index: 0, result: null, scored: [], over: false}
 }
 
-const run = ref(newRun(pickRound(), 'game'))
+// A game is five cities and the share code that names them, see cities.js.
+// A code in the address -- ?game=5pe27vw, which is what a shared link is --
+// asks for that game rather than a fresh one.
+const GAME_PARAM = 'game'
+
+function newGame({code, cities}) {
+  return newRun(cities, 'game', code)
+}
+
+function linkedGame() {
+  const code = new URLSearchParams(window.location.search).get(GAME_PARAM)
+  return code === null ? null : gameFromCode(code)
+}
+
+// The address is kept honest: it names the game while a linked one is being
+// played, so a reload brings it back, and names nothing once a fresh one is
+// drawn, so a reload does not bring back the game before it.
+function clearAddress() {
+  const url = new URL(window.location.href)
+  if (!url.searchParams.has(GAME_PARAM)) return
+  url.searchParams.delete(GAME_PARAM)
+  window.history.replaceState(null, '', url)
+}
+
+function shareLink(code) {
+  const url = new URL(window.location.href)
+  url.search = ''
+  url.hash = ''
+  url.searchParams.set(GAME_PARAM, code)
+  return url.href
+}
+
+const linked = linkedGame()
+// An address that named no real game is cleaned up, or a reload would keep
+// asking for it.
+if (!linked) clearAddress()
+const run = ref(newGame(linked ?? pickRound()))
+// Whether the current game's link has been put on the clipboard, for the
+// card's button to say so. Cleared with the game it was for.
+const copied = ref(false)
 // The game set aside while countries are being picked or studied. Held as the
 // object it already was, so going back to it is going back to it and not to a
 // copy of what it looked like.
@@ -165,7 +204,19 @@ function advance() {
 }
 
 function restart() {
-  swapRun(newRun(pickRound(), 'game'))
+  clearAddress()
+  swapRun(newGame(pickRound()))
+}
+
+function copyLink() {
+  navigator.clipboard
+    ?.writeText(shareLink(run.value.code))
+    .then(() => {
+      copied.value = true
+    })
+    // No clipboard -- an http preview, a webview that denies it. The code is
+    // on the card to be read off, which is what it is for.
+    .catch(() => {})
 }
 
 // Every run change goes through here: a new run means a globe with nothing of
@@ -174,6 +225,7 @@ function swapRun(next) {
   game.value += 1
   run.value = next
   round.value += 1
+  copied.value = false
 }
 
 // ---------------------------------------------------------------------------
@@ -362,11 +414,14 @@ onBeforeUnmount(() => {
       <FinalSummary
         v-if="run.over && !selecting"
         :cities="cities"
+        :code="run.code"
+        :copied="copied"
         :max-score="maxScore"
         :percent="percent"
         :scored="run.scored"
         :studying="studying"
         :total="total"
+        @copy="copyLink"
       />
 
       <!-- Every handler here is one the keys already call; see onKeyDown for
