@@ -401,16 +401,70 @@ function recognize(features, disputed) {
   }
   absorb('Somalia', 'Somaliland')
   absorb('Cyprus', 'Northern Cyprus', 'Cyprus No Mans Area')
+  // The two special administrative regions, which Natural Earth ships as
+  // countries. The game's pool labels them "Hong Kong, China", and the
+  // subdivisions layer gets them back as exactly that -- see subdivide().
+  absorb('China', 'Hong Kong S.A.R.', 'Macao S.A.R')
 
   return features.filter((f) => !gone.has(admin(f)))
 }
 
-async function build(
+// The subdivisions layer's share of the corrections above. Natural Earth
+// files Crimea's two subdivisions under Russia, so once the countries layer
+// has handed the peninsula back to Ukraine they have to follow, or Sevastopol
+// belongs to a country with no subdivisions. They also go in as one: the
+// pool labels Sevastopol "Crimea, Ukraine" and means the peninsula, and the
+// federal-city status that splits the port from the republic is the Russian
+// administration's, not the map being drawn.
+//
+// Hong Kong and Macau come in the other way. Their own layer has Hong Kong
+// as eighteen districts, which is not what "Hong Kong, China" names, so each
+// is added as a single subdivision of China cut from the country polygon it
+// was, and the districts are dropped with the countries they belonged to.
+//
+// `sars` are the raw countries-layer features for the two, taken before
+// recognize() has run.
+function subdivide(features, sars) {
+  const name = (f) => firstOf(f.properties, 'name_en', 'name')
+  const byName = (wanted) => {
+    const found = features.find((f) => name(f) === wanted)
+    if (!found) throw new Error(`subdivisions layer has no feature named ${wanted}`)
+    return found
+  }
+  const parts = (f) =>
+    f.geometry.type === 'Polygon' ? [f.geometry.coordinates] : f.geometry.coordinates
+  const note = (text) => process.stderr.write(`  ${text}
+`)
+
+  const crimea = byName('Autonomous Republic of Crimea')
+  const sevastopol = byName('Sevastopol')
+  crimea.properties = {adm0_a3: 'UKR', name_en: 'Crimea', type_en: 'Autonomous Republic'}
+  crimea.geometry = {
+    type: 'MultiPolygon',
+    coordinates: polygonClipping.union(parts(crimea), parts(sevastopol)),
+  }
+  note('Crimea and Sevastopol: one subdivision of Ukraine')
+
+  const added = sars.map((sar) => ({
+    type: 'Feature',
+    properties: {
+      adm0_a3: 'CHN',
+      name_en: firstOf(sar.properties, 'NAME_EN', 'NAME'),
+      type_en: 'Special Administrative Region',
+    },
+    geometry: sar.geometry,
+  }))
+  note(`${added.map((f) => f.properties.name_en).join(' and ')}: subdivisions of China`)
+
+  return [...features.filter((f) => f !== sevastopol), ...added]
+}
+
+function build(
   file,
+  source,
   describe,
   {keep = () => true, mendHoles = false, adjust = (features) => features} = {},
 ) {
-  const source = await fetchSource(file)
   const adjusted = adjust(source.features)
   const kept = adjusted.filter((f) => keep(f.properties))
   const dropped = adjusted.filter((f) => !keep(f.properties))
@@ -433,8 +487,16 @@ async function build(
 
 async function main() {
   const disputed = (await fetchSource(SOURCES.disputed)).features
-  const countries = await build(
+  const countriesSource = await fetchSource(SOURCES.countries)
+  // Copied out before recognize() folds them into China.
+  const sars = ['Hong Kong S.A.R.', 'Macao S.A.R'].map((admin) => {
+    const found = countriesSource.features.find((f) => f.properties.ADMIN === admin)
+    if (!found) throw new Error(`countries layer has no feature named ${admin}`)
+    return {properties: {...found.properties}, geometry: found.geometry}
+  })
+  const countries = build(
     SOURCES.countries,
+    countriesSource,
     (p) => ({
       n: firstOf(p, 'NAME_EN', 'NAME', 'name'),
       // ISO 3166-1 alpha-3, which is how a subdivision names its country.
@@ -448,17 +510,21 @@ async function main() {
   )
 
   const shipped = new Set(countries.map((c) => c.a))
-  const regions = await build(
+  const regions = build(
     SOURCES.regions,
+    await fetchSource(SOURCES.regions),
     (p) => ({
       n: firstOf(p, 'name_en', 'name'),
       a: firstOf(p, 'adm0_a3'),
       // "State", "Province", "Oblast" -- shown next to the subdivision's name.
       t: firstOf(p, 'type_en', 'type'),
     }),
-    // Subdivisions are only ever reached through their country, so one whose
-    // country is no longer shipped can never be looked up.
-    {keep: (p) => shipped.has(firstOf(p, 'adm0_a3'))},
+    {
+      // Subdivisions are only ever reached through their country, so one whose
+      // country is no longer shipped can never be looked up.
+      keep: (p) => shipped.has(firstOf(p, 'adm0_a3')),
+      adjust: (features) => subdivide(features, sars),
+    },
   )
 
   fs.mkdirSync(OUT_DIR, {recursive: true})

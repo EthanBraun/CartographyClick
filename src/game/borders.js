@@ -72,13 +72,23 @@ async function fetchBorders() {
 // edge is as much of a border as a coast. Null for either if nothing resolves,
 // and null overall until loadBorders() has settled.
 //
-// Answered from the coordinates rather than from what the place says it is,
-// which resolves every place in the pool to the country its label names. The
-// one that did not was the class of thing you would expect: Goma's source
-// coordinates sat about a kilometer east of where a 1:10m map draws the
-// DRC/Rwanda line through the city, so its outline was Rwanda's. The pool
-// now places it a kilometer further into town instead of this file carrying a
-// name-to-polygon override for one border town.
+// The country is answered from the coordinates rather than from what the
+// place says it is, which resolves every place in the pool to the country its
+// label names. The one that did not was the class of thing you would expect:
+// Goma's source coordinates sat about a kilometer east of where a 1:10m map
+// draws the DRC/Rwanda line through the city, so its outline was Rwanda's.
+// The pool now places it a kilometer further into town instead of this file
+// carrying a name-to-polygon override for one border town.
+//
+// The subdivision is answered from the label first, and the same class of
+// thing is why: a state line down a river puts a downtown on the bank, and a
+// 1:10m river runs a kilometer or two from the real one. St. Louis and
+// Cincinnati both fell across it, into Illinois and Kentucky. Nudging each
+// city into its own state is a game of whack-a-mole, and the label is what
+// the card under the outline says anyway, so where the country has a
+// subdivision by that name it is the one drawn. The coordinates decide where
+// the label is not a name the map knows -- "Mallorca" for the Balearic
+// Islands, "Sverdlovsk Oblast" for Sverdlovsk.
 export function outlineFor({lat, lon, region}) {
   if (!countries) return null
 
@@ -87,7 +97,7 @@ export function outlineFor({lat, lon, region}) {
 
   return {
     country: describe(country),
-    region: namesSubdivision(region) ? subdivisionOf(country, lat, lon) : null,
+    region: namesSubdivision(region) ? subdivisionOf(country, region, lat, lon) : null,
   }
 }
 
@@ -240,22 +250,33 @@ function countryName(name) {
 // In practice that is the ten countries whose places carry a state, province,
 // oblast or prefecture -- the US, Canada, Mexico, Brazil, Argentina, Russia,
 // China, India, Indonesia, Australia -- plus the island territories labeled
-// the same way, Madeira, Svalbard, Zanzibar, Penang. Deriving it from the
+// the same way, Madeira, Svalbard, Zanzibar, Penang, and the two special
+// administrative regions, which tools/build-borders.js files under China to
+// match. Deriving it from the
 // label rather than listing those keeps the two from drifting: a place
 // relabeled in cities.js takes its outline with it.
 function namesSubdivision(label) {
   return typeof label === 'string' && label.includes(', ')
 }
 
-function subdivisionOf(country, lat, lon) {
+function subdivisionOf(country, label, lat, lon) {
   const siblings = regionsByCountry?.get(country.a)
   // One subdivision means the country is its own only subdivision -- Monaco,
   // Singapore, Vatican City. Drawing it would just trace the blue line in
   // yellow.
   if (!siblings || siblings.length < 2) return null
 
-  const region = locate(siblings, lat, lon)
+  const named = plain(label.slice(0, label.indexOf(', ')))
+  const region =
+    siblings.find((sibling) => plain(sibling.n) === named) ?? locate(siblings, lat, lon)
   return region ? describe(region) : null
+}
+
+// A name as the pool and Natural Earth can both be expected to spell it:
+// lowercase and without accents, so the pool's "Québec" is the map's "Quebec".
+// A few subdivisions are unnamed in Natural Earth; those never match.
+function plain(name) {
+  return (name ?? '').normalize('NFD').replace(/\p{M}/gu, '').toLowerCase()
 }
 
 function describe(feature) {
