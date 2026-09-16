@@ -383,7 +383,7 @@ onBeforeUnmount(() => {
 
 /* The aim, on touch: a ring on the exact pixel a commit picks, open in the
    middle so the ground it is over stays readable. Outlined in dark on both
-   sides so it holds against snow and open sea alike. */
+   sides so it holds against snow, sand and open sea alike. */
 .crosshair {
   position: absolute;
   top: 50%;
@@ -395,8 +395,8 @@ onBeforeUnmount(() => {
   border: 1.5px solid rgba(255, 255, 255, 0.92);
   border-radius: 50%;
   box-shadow:
-    0 0 0 1px rgba(0, 0, 0, 0.55),
-    inset 0 0 0 1px rgba(0, 0, 0, 0.55);
+    0 0 0 2px rgba(0, 0, 0, 0.7),
+    inset 0 0 0 2px rgba(0, 0, 0, 0.7);
   pointer-events: none;
 }
 
@@ -410,7 +410,7 @@ onBeforeUnmount(() => {
   margin: -2px 0 0 -2px;
   border-radius: 50%;
   background: #fff;
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6);
+  box-shadow: 0 0 0 1.5px rgba(0, 0, 0, 0.75);
 }
 
 /* CesiumJS is Apache-2.0, so its logo is optional and we drop it. The text
