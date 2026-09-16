@@ -13,6 +13,9 @@ defineProps({
   scored: {type: Array, required: true},
   // The run's cities, in the same order.
   cities: {type: Array, required: true},
+  // In a study run, the round each city would be asked in during a game, as
+  // {round, multiplier} in the same order. Null in a game.
+  tiers: {type: Array, default: null},
   // The game's share code, see cities.js. A study run has none.
   code: {type: String, default: null},
   // Whether this game's link is on the clipboard already.
@@ -38,9 +41,14 @@ defineEmits(['copy'])
           <span class="breakdown-region">{{ cities[i].region }}</span>
         </span>
         <span class="breakdown-distance">{{ formatKm(entry.distanceKm) }}</span>
-        <!-- A study run is flat, so the working would be "82 x1" thirty times. -->
+        <!-- A study run is flat, so the working would be "82 x1" thirty
+             times. The round the city belongs to takes its place: what the
+             row is worth in a game, which is what the working said too. -->
         <span v-if="!studying" class="breakdown-working">
           {{ entry.points }}<span class="mult" :class="'mult-' + entry.multiplier">&times;{{ entry.multiplier }}</span>
+        </span>
+        <span v-else-if="tiers" class="breakdown-working">
+          <span class="tier" :class="'mult-' + tiers[i].multiplier">round {{ tiers[i].round }}</span>
         </span>
         <span class="breakdown-points">{{ entry.awarded }}</span>
       </li>
@@ -201,10 +209,15 @@ defineEmits(['copy'])
 }
 
 /* The 0-100 score and its multiplier, so the awarded column reads as a
-   product rather than a mystery. */
+   product rather than a mystery. In a study run, the round chip instead, at
+   the region line's size so it sits under the number column's weight. */
 .breakdown-working {
   text-align: right;
   font-variant-numeric: tabular-nums;
+}
+
+.breakdown-working .tier {
+  font-size: 12px;
 }
 
 .mult {

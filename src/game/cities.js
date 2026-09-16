@@ -878,6 +878,17 @@ export const ROUNDS_PER_GAME = TIERS.length
 // TIERS exists to express is exactly what it does not want.
 export const ALL_PLACES = TIERS.flat()
 
+// The round a place would be asked in, zero-based. A study run flattens the
+// tiers away but still says which one a city came from, since that is what
+// tells the player whether it was one to know. Keyed by label rather than by
+// object, because the place that comes back out of Vue's state is a reactive
+// proxy of the one that went in, and a Map does not know them for the same.
+const ROUND_OF = new Map(TIERS.flatMap((tier, i) => tier.map((place) => [labelOf(place), i])))
+
+export function roundOf(place) {
+  return ROUND_OF.get(labelOf(place))
+}
+
 // Drawing uniformly at random felt far more repetitive than it should have:
 // with one place taken per round, a pool of N collides with itself after
 // roughly sqrt(N) games. Keeping a recent list per round and drawing only from

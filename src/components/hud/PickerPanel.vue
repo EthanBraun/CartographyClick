@@ -1,6 +1,8 @@
 <script setup>
 // The top panel while countries are being picked: what the cursor is on, what
 // has been taken so far, and the keys.
+import {formatCities} from './format'
+
 defineProps({
   // False until the city-to-country index is built; the panel says so.
   indexed: {type: Boolean, default: false},
@@ -25,7 +27,7 @@ defineProps({
       <template v-else>
         {{ hovered.name }}
         <span class="hovered-count" :class="{none: !hoveredCount}">
-          {{ hoveredCount ? `${hoveredCount} cities` : 'no cities in the pool' }}
+          {{ hoveredCount ? formatCities(hoveredCount) : 'no cities in the pool' }}
         </span>
       </template>
     </div>
@@ -40,7 +42,7 @@ defineProps({
     <div class="hint">
       <kbd>F</kbd> toggle &middot;
       <kbd>space</kbd>
-      <template v-if="selectedCities">study {{ selectedCities }} cities</template>
+      <template v-if="selectedCities">study {{ formatCities(selectedCities) }}</template>
       <template v-else>study</template>
       <template v-if="chips.length"> &middot; <kbd>C</kbd> clear</template>
       &middot; <kbd>`</kbd> back to the game

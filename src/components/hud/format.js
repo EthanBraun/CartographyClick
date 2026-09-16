@@ -5,3 +5,8 @@ export function formatKm(km) {
   if (km < 100) return `${km.toFixed(1)} km`
   return `${Math.round(km).toLocaleString()} km`
 }
+
+// "1 city", "12 cities": the count with its noun, for the picker's readouts.
+export function formatCities(count) {
+  return `${count} ${count === 1 ? 'city' : 'cities'}`
+}

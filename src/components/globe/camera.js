@@ -18,8 +18,8 @@ export const METERS_PER_KM = 1000
 // A fixed height rather than a multiple of the current one, so every round
 // opens at the same scale no matter how wide the last reveal had to pull back.
 //
-// The globe stays in the player's hands through the climb: see
-// liftForNextRound for why the lift is not a flight.
+// The globe stays in the player's hands through the climb: see glideTo for
+// why the lift is not a flight.
 //
 // Flight times throughout are on the slow side for a camera move. Pulling
 // out is the part that feels violent when it is quick -- the ground rushes
@@ -168,29 +168,61 @@ export function lookAtCartographic(viewer) {
     : undefined
 }
 
-// Straight up to `height` and level, holding the ground the camera is aimed at
-// under the center of the screen.
-function liftTo(viewer, height, duration) {
-  // Aiming at space is rare but possible; standing still beats snapping to an
-  // arbitrary point, so fall back to whatever the camera is above.
-  const site = lookAtCartographic(viewer) ?? viewer.camera.positionCartographic
-  viewer.camera.flyTo({
-    destination: Cesium.Cartesian3.fromRadians(
-      site.longitude,
-      site.latitude,
-      height,
-    ),
-    // The reveal leaves the camera tilted and this undoes it. flyTo would
-    // default to exactly this, but the reset is the point of the call, so it
-    // says so rather than relying on the default staying put.
-    orientation: {heading: 0, pitch: -Cesium.Math.PI_OVER_TWO, roll: 0},
-    duration,
-  })
-}
-
 // Pull up and level out for the next city, holding the ground the reveal left
 // under the center of the screen. Runs until it tops out or the returned
-// function is called, whichever is first.
+// function is called, whichever is first. See glideTo for why it is not a
+// flight.
+export function liftForNextRound(viewer) {
+  return glideTo(viewer, {...aimOf(viewer), height: NEXT_ROUND_HEIGHT})
+}
+
+// The ground under the middle of the screen, as {longitude, latitude}, which
+// is what the lifts hold still while they climb. Aiming at space is rare but
+// possible; standing put beats snapping to an arbitrary point, so that falls
+// back to whatever the camera is above.
+function aimOf(viewer) {
+  const {longitude, latitude} =
+    lookAtCartographic(viewer) ?? viewer.camera.positionCartographic
+  return {longitude, latitude}
+}
+
+// Frame a country's ground, north-up and straight down, for the next city of
+// a study run. `extent` is [west, south, east, north] in degrees as
+// game/borders' countryExtentAt() gives it, with west past east where the
+// ground crosses the antimeridian. Runs until it lands or the returned
+// function is called; the same glide as the game's lift, so the globe is as
+// free in the player's hands opening on Brazil as it is opening on the world.
+export function liftToGround(viewer, [west, south, east, north]) {
+  const {camera} = viewer
+  const ground = Cesium.Rectangle.fromDegrees(west, south, east, north)
+  const middle = Cesium.Rectangle.center(ground)
+  const halfWidth = Math.max(
+    (Cesium.Rectangle.computeWidth(ground) * GROUND_PADDING) / 2,
+    GROUND_MIN_RADIANS,
+  )
+  const halfHeight = Math.max(
+    (Cesium.Rectangle.computeHeight(ground) * GROUND_PADDING) / 2,
+    GROUND_MIN_RADIANS,
+  )
+  const lat = (x) => Cesium.Math.clamp(x, -Cesium.Math.PI_OVER_TWO, Cesium.Math.PI_OVER_TWO)
+  const framed = new Cesium.Rectangle(
+    Cesium.Math.negativePiToPi(middle.longitude - halfWidth),
+    lat(middle.latitude - halfHeight),
+    Cesium.Math.negativePiToPi(middle.longitude + halfWidth),
+    lat(middle.latitude + halfHeight),
+  )
+  // Where a flight to the rectangle would have ended: over its middle, at the
+  // height that fits it in this frustum.
+  const landing = Cesium.Cartographic.fromCartesian(
+    camera.getRectangleCameraCoordinates(framed),
+  )
+  return glideTo(viewer, landing)
+}
+
+// Ease the camera to `to`: a {longitude, latitude, height} in radians and
+// meters, and optionally the {heading, pitch} to end at, level and north-up
+// by default. Runs until it lands or the returned function is called,
+// whichever is first.
 //
 // Not a flyTo. A flight owns the whole camera, so a drag during it is undone
 // on the next frame and the globe feels stuck for as long as the climb lasts.
@@ -199,29 +231,32 @@ function liftTo(viewer, height, duration) {
 // under a camera that is still on its way up -- which is a nice thing to be
 // able to do while the next city comes in.
 //
-// The climb's own turning -- bringing the aimed ground under the center and
+// The glide's own turning -- bringing the destination under the center and
 // levelling off -- is applied as a delta per frame on top of wherever the
 // controller has put the camera, rather than as a position, so the two add up
 // instead of fighting. Height is the one thing set outright, so the lift
 // lands exactly where every round opens. That also means a wheel or a pinch
-// is undone every frame, and that is meant: the climb owns the height and the
+// is undone every frame, and that is meant: the glide owns the height and the
 // levelling to the end. Letting a zoom cut it short left the camera at
 // whatever tilt it had reached, with no way on a phone to level it again.
-// Turning the globe is the player's during the climb; zooming it waits.
-export function liftForNextRound(viewer) {
+// Turning the globe is the player's during the glide; zooming it waits.
+function glideTo(
+  viewer,
+  {longitude, latitude, height, heading = 0, pitch = -Cesium.Math.PI_OVER_TWO},
+  duration = NEXT_ROUND_FLIGHT_SECONDS,
+) {
   const {scene, camera} = viewer
-  // A reveal flight still in the air would fight the climb; this one wins.
+  // A reveal flight still in the air would fight the glide; this one wins.
   camera.cancelFlight()
 
   const here = camera.positionCartographic
-  const aim = lookAtCartographic(viewer) ?? here
   const fromHeight = here.height
   // Shortest way round, so a heading of 359 degrees eases to north through one
   // degree and not through the whole compass.
-  const turnLon = Cesium.Math.negativePiToPi(aim.longitude - here.longitude)
-  const turnLat = aim.latitude - here.latitude
-  const turnHeading = Cesium.Math.negativePiToPi(0 - camera.heading)
-  const turnPitch = -Cesium.Math.PI_OVER_TWO - camera.pitch
+  const turnLon = Cesium.Math.negativePiToPi(longitude - here.longitude)
+  const turnLat = latitude - here.latitude
+  const turnHeading = Cesium.Math.negativePiToPi(heading - camera.heading)
+  const turnPitch = pitch - camera.pitch
   const lerp = Cesium.Math.lerp
   const began = performance.now()
   // How much of the turn has been handed out so far, so each frame applies
@@ -230,9 +265,7 @@ export function liftForNextRound(viewer) {
 
   const tick = () => {
     const seconds = (performance.now() - began) / 1000
-    const t = Cesium.EasingFunction.QUINTIC_IN_OUT(
-      Math.min(1, seconds / NEXT_ROUND_FLIGHT_SECONDS),
-    )
+    const t = Cesium.EasingFunction.QUINTIC_IN_OUT(Math.min(1, seconds / duration))
     const slice = t - dealt
     dealt = t
     const now = camera.positionCartographic
@@ -247,7 +280,7 @@ export function liftForNextRound(viewer) {
           Cesium.Math.PI_OVER_TWO,
         ),
         // Eased in log space so the climb looks even, as in the finale.
-        Math.exp(lerp(Math.log(fromHeight), Math.log(NEXT_ROUND_HEIGHT), t)),
+        Math.exp(lerp(Math.log(fromHeight), Math.log(height), t)),
       ),
       orientation: {
         heading: camera.heading + turnHeading * slice,
@@ -264,42 +297,14 @@ export function liftForNextRound(viewer) {
   return stop
 }
 
-// Fly to frame a country's ground, north-up and straight down, for the next
-// city of a study run. `extent` is [west, south, east, north] in degrees as
-// game/borders' countryExtentAt() gives it, with west past east where the
-// ground crosses the antimeridian.
-export function flyToGround(viewer, [west, south, east, north]) {
-  const {camera} = viewer
-  // A reveal flight still in the air would fight this one; this one wins.
-  camera.cancelFlight()
-  const ground = Cesium.Rectangle.fromDegrees(west, south, east, north)
-  const middle = Cesium.Rectangle.center(ground)
-  const halfWidth = Math.max(
-    (Cesium.Rectangle.computeWidth(ground) * GROUND_PADDING) / 2,
-    GROUND_MIN_RADIANS,
-  )
-  const halfHeight = Math.max(
-    (Cesium.Rectangle.computeHeight(ground) * GROUND_PADDING) / 2,
-    GROUND_MIN_RADIANS,
-  )
-  const lat = (x) => Cesium.Math.clamp(x, -Cesium.Math.PI_OVER_TWO, Cesium.Math.PI_OVER_TWO)
-  camera.flyTo({
-    destination: new Cesium.Rectangle(
-      Cesium.Math.negativePiToPi(middle.longitude - halfWidth),
-      lat(middle.latitude - halfHeight),
-      Cesium.Math.negativePiToPi(middle.longitude + halfWidth),
-      lat(middle.latitude + halfHeight),
-    ),
-    orientation: {heading: 0, pitch: -Cesium.Math.PI_OVER_TWO, roll: 0},
-    duration: NEXT_ROUND_FLIGHT_SECONDS,
-  })
-}
-
 // Pull out to where countries are things you can point at, holding whatever
 // ground was on screen under the middle of it. Opening the mode at the
-// altitude a reveal leaves would open it on one valley somewhere.
-export function flyToSelect(viewer) {
-  liftTo(viewer, SELECT_HEIGHT, SELECT_FLIGHT_SECONDS)
+// altitude a reveal leaves would open it on one valley somewhere. A glide
+// like the round lifts, so the globe can already be turned toward the
+// country in mind while the camera is still on its way up. Runs until it
+// tops out or the returned function is called.
+export function liftToSelect(viewer) {
+  return glideTo(viewer, {...aimOf(viewer), height: SELECT_HEIGHT}, SELECT_FLIGHT_SECONDS)
 }
 
 // The final score's camera move: out to the whole globe and over to the
@@ -395,15 +400,15 @@ export function flyToReveal(viewer, guess, target) {
   })
 }
 
-// Where the camera stands right now, in a shape restoreView can fly back to.
+// Where the camera stands right now, in a shape glideToView can go back to.
 export function captureView(viewer) {
   const {camera} = viewer
-  return {
-    destination: Cesium.Cartesian3.clone(camera.positionWC),
-    orientation: {heading: camera.heading, pitch: camera.pitch, roll: camera.roll},
-  }
+  const {longitude, latitude, height} = camera.positionCartographic
+  return {longitude, latitude, height, heading: camera.heading, pitch: camera.pitch}
 }
 
-export function restoreView(viewer, view) {
-  viewer.camera.flyTo({...view, duration: SELECT_FLIGHT_SECONDS})
+// Back to a captured view, tilt and all, the same way select mode was
+// entered. Runs until it lands or the returned function is called.
+export function glideToView(viewer, view) {
+  return glideTo(viewer, view, SELECT_FLIGHT_SECONDS)
 }

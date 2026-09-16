@@ -8,6 +8,9 @@ defineProps({
   rounds: {type: Number, required: true},
   studying: {type: Boolean, default: false},
   multiplier: {type: Number, default: 1},
+  // In a study run, the round this city would be asked in during a game, as
+  // {round, multiplier}. Null in a game.
+  tier: {type: Object, default: null},
 })
 </script>
 
@@ -16,7 +19,10 @@ defineProps({
     <div class="meta">
       <template v-if="studying">
         city {{ index + 1 }} of {{ rounds }}
-        <span class="tag">study</span>
+        <span class="tag study">study</span>
+        <span v-if="tier" class="tag tier" :class="'mult-' + tier.multiplier">
+          round {{ tier.round }}
+        </span>
       </template>
       <template v-else>
         round {{ index + 1 }} of {{ rounds }}
@@ -35,9 +41,13 @@ defineProps({
 }
 
 /* Says what mode you are in where the multiplier sits in a game, since the two
-   are the same question -- how is this city being scored. */
+   are the same question -- how is this city being scored. The round chip
+   beside it is hud.css's .tier. */
 .tag {
   margin-left: 6px;
+}
+
+.study {
   padding: 0 5px;
   border-radius: 3px;
   background: rgba(232, 196, 106, 0.16);

@@ -36,6 +36,10 @@ export function createMarkers(viewer, accuracy) {
   let settledColor = null
   // Guess site, in radians.
   let guess = null
+  // A game paused for a study run: everything it had standing when it was
+  // swapped out, hidden, as {id, state}. One slot, since only one game is
+  // ever held; a shelf never claimed goes when the next game is shelved.
+  let shelf = null
 
   // Put the guess down, or move it. The pin is created once and reads `guess`
   // every frame, so a second drop walks it rather than stacking another.
@@ -134,6 +138,56 @@ export function createMarkers(viewer, accuracy) {
     regionOutline = null
   }
 
+  // The globe changing hands between runs, `from` to `to`. With `hold`, the
+  // outgoing run is shelved -- pins, outlines and all -- rather than cleared,
+  // and a run coming back to its shelf gets everything on it back as it was.
+  // Returns whether that happened, so the caller knows the outlines standing
+  // are the run's own and not last city's.
+  function swap({from, to, hold}) {
+    if (hold) shelve(from)
+    else clear()
+    if (shelf?.id !== to) return false
+    const kept = shelf.state
+    shelf = null
+    pin = kept.pin
+    targetPin = kept.targetPin
+    link = kept.link
+    history = kept.history
+    settledColor = kept.settledColor
+    guess = kept.guess
+    countryOutline = kept.countryOutline
+    regionOutline = kept.regionOutline
+    show(true)
+    return true
+  }
+
+  function shelve(id) {
+    if (shelf) discard(shelf.state)
+    show(false)
+    shelf = {
+      id,
+      state: {pin, targetPin, link, history, settledColor, guess, countryOutline, regionOutline},
+    }
+    pin = null
+    targetPin = null
+    link = null
+    history = []
+    settledColor = null
+    guess = null
+    countryOutline = null
+    regionOutline = null
+  }
+
+  // A shelved run that is never coming back.
+  function discard(state) {
+    for (const entity of [state.pin, state.targetPin, state.link, ...state.history]) {
+      if (entity) viewer.entities.remove(entity)
+    }
+    for (const each of [state.countryOutline, state.regionOutline]) {
+      if (each) destroyOutline(viewer, each)
+    }
+  }
+
   // Everything the game has standing on the globe, hidden for the length of
   // select mode. Hidden rather than removed: the paused game still owns these
   // and is going to want them back.
@@ -151,6 +205,8 @@ export function createMarkers(viewer, accuracy) {
   function dispose() {
     stopFilling(countryOutline)
     stopFilling(regionOutline)
+    stopFilling(shelf?.state.countryOutline)
+    stopFilling(shelf?.state.regionOutline)
   }
 
   return {
@@ -159,6 +215,7 @@ export function createMarkers(viewer, accuracy) {
     outline,
     retire,
     clear,
+    swap,
     clearOutlines,
     show,
     dispose,

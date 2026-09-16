@@ -9,11 +9,11 @@ import {countryExtentAt, loadBorders, outlineFor} from '../game/borders'
 import {
   applyMinimumZoom,
   captureView,
-  flyToGround,
   flyToReveal,
-  flyToSelect,
+  glideToView,
   liftForNextRound,
-  restoreView,
+  liftToGround,
+  liftToSelect,
   startFinale,
 } from './globe/camera'
 import {createMarkers} from './globe/markers'
@@ -36,9 +36,10 @@ const props = defineProps({
   round: {type: Number, default: 0},
   // 1 = dead on, 0 = as wrong as it gets; colors the guess pin.
   accuracy: {type: Number, default: 1},
-  // Bumped only when a new game starts. `round` moves for every city, so on
-  // its own it cannot tell "next city" from "start over" -- and the two want
-  // opposite things from the pins already on the globe.
+  // Which run this is, by the coordinator's id for it. `round` moves for
+  // every city, so on its own it cannot tell "next city" from "start over"
+  // -- and the two want opposite things from the pins already on the globe.
+  // An id seen before is a paused game resuming, which wants its pins back.
   game: {type: Number, default: 0},
   // True once the run's last city has been revealed and the score is up. The
   // globe pulls out to the whole planet and turns slowly behind the card.
@@ -162,11 +163,14 @@ function dropPin() {
 // Put the answer on the globe and frame the miss.
 function revealTarget() {
   if (!live() || !props.target) return
+  const sites = markers.reveal(props.target)
+  // Nothing to frame when the answer is already up, which is a paused game
+  // resuming mid-reveal; the lift bringing it back keeps the camera.
+  if (!sites) return
   // A quick guess can land while the camera is still climbing from the last
   // round. The reveal owns the camera from here.
   endLift()
-  const sites = markers.reveal(props.target)
-  if (sites) flyToReveal(viewer, sites.guess, sites.target)
+  flyToReveal(viewer, sites.guess, sites.target)
 }
 
 // Outline the country the answer is in, and the subdivision within it. The
@@ -194,19 +198,23 @@ async function revealBorders() {
 // prompt names anyway. `restarting` marks a new game, where the round that
 // just finished is thrown away with the rest of the history rather than
 // joining it.
-function clearRound(restarting) {
+//
+// `swap` is null for the next city of the same run, and {from, to, hold} when
+// the run itself changed: a game leaving for a study run (`hold`) keeps its
+// pins on a shelf, and a paused game coming back gets them and its outlines
+// back as it left them. Either way the camera lifts, since the view the
+// globe is coming from belongs to something else.
+function clearRound(swap) {
   if (!live()) return
-  if (restarting) markers.clear()
-  else markers.retire()
-  markers.clearOutlines()
+  const resumed = swap ? markers.swap(swap) : (markers.retire(), false)
+  if (!resumed) markers.clearOutlines()
   endLift()
   // The borders can still be loading on a study run's first city, or the
   // city can sit off every polygon; either way the game's lift stands in.
   const ground = props.studying && props.target
     ? countryExtentAt(props.target.lat, props.target.lon)
     : null
-  if (ground) flyToGround(viewer, ground)
-  else stopLift = liftForNextRound(viewer)
+  stopLift = ground ? liftToGround(viewer, ground) : liftForNextRound(viewer)
 }
 
 function endLift() {
@@ -243,7 +251,7 @@ function enterSelect() {
   markers.show(false)
   selectedGame = props.game
   savedView = captureView(viewer)
-  flyToSelect(viewer)
+  stopLift = liftToSelect(viewer)
 }
 
 function leaveSelect() {
@@ -260,7 +268,7 @@ function leaveSelect() {
   // Back to a finished game is back to its score card, so the finale resumes
   // rather than the camera landing on a globe that has stopped turning.
   if (props.over) beginFinale()
-  else restoreView(viewer, view)
+  else stopLift = glideToView(viewer, view)
 }
 
 watch(
@@ -279,15 +287,6 @@ watch(
   () => select.paint(),
 )
 
-watch(
-  () => props.revealed,
-  (revealed) => {
-    if (!revealed) return
-    revealTarget()
-    revealBorders()
-  },
-)
-
 // Registered ahead of the round watcher on purpose: a restart drops `over` and
 // bumps the counters in one tick, and the spin has to be off before the lift
 // for the next city starts, or the two drive the camera at once for a frame.
@@ -299,16 +298,31 @@ watch(
   },
 )
 
-// A new city wipes the board. Advancing bumps `round` and drops `revealed` in
-// the same tick, so this runs alongside the watcher above — which is why that
-// one only ever acts on the rising edge.
-// Watched as a pair rather than as two watchers: a restart moves both counters
-// in the same tick, and split across two callbacks whether the finished round
-// joined the history or was cleared with it would come down to which watcher
-// happened to be registered first.
+// A new city wipes the board. Watched as a set rather than as separate
+// watchers: a restart moves both counters in the same tick, and split across
+// two callbacks whether the finished round joined the history or was cleared
+// with it would come down to which watcher happened to be registered first.
+// `studying` rides along to say what kind of run is leaving and arriving.
 watch(
-  () => [props.game, props.round],
-  ([game], [wasGame]) => clearRound(game !== wasGame),
+  () => [props.game, props.round, props.studying],
+  ([game, , studying], [wasGame, , wasStudying]) =>
+    clearRound(
+      game === wasGame ? null : {from: wasGame, to: game, hold: studying && !wasStudying},
+    ),
+)
+
+// Registered after the round watcher on purpose. Advancing bumps `round` and
+// drops `revealed` in the same tick, which this ignores -- it acts on the
+// rising edge only -- and resuming a paused game can raise `revealed` in the
+// tick that puts the game's answer pin back, which has to be standing before
+// this looks for it, or it would plant a second one.
+watch(
+  () => props.revealed,
+  (revealed) => {
+    if (!revealed) return
+    revealTarget()
+    revealBorders()
+  },
 )
 
 onMounted(() => {

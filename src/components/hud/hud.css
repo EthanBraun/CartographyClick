@@ -63,6 +63,17 @@ kbd {
   color: #f28b6a;
 }
 
+/* The round a game would ask a city in, as a chip in that round's multiplier
+   color, so a study run reads difficulty the way a game does: green is one
+   to know, coral is one to be proud of. Shown on the prompt and in the final
+   breakdown. The tint is the text's own. */
+.tier {
+  padding: 0 5px;
+  border-radius: 3px;
+  background: color-mix(in srgb, currentColor 16%, transparent);
+  white-space: nowrap;
+}
+
 .hint {
   margin-top: 8px;
   font-size: 12px;

@@ -13,7 +13,7 @@ import Tally from './components/hud/Tally.vue'
 import TouchBar from './components/hud/TouchBar.vue'
 import './components/hud/hud.css'
 import {sharedGround} from './game/borders'
-import {gameFromCode, pickRound} from './game/cities'
+import {gameFromCode, pickRound, roundOf} from './game/cities'
 import {cityCount, loadCountryIndex, studyRun} from './game/study'
 import {
   GAME_MAX,
@@ -41,8 +41,11 @@ const SELECT_KEY = '`'
 // city the pool has for a set of countries, scored flat. They are the same
 // shape on purpose -- everything from the guess down treats them identically,
 // and only the two lines that build one know which is which.
+// Numbered, so the globe can tell a run it has shown before from a new one.
+let runs = 0
+
 function newRun(cities, kind, code = null) {
-  return {kind, cities, code, index: 0, result: null, scored: [], over: false}
+  return {id: ++runs, kind, cities, code, index: 0, result: null, scored: [], over: false}
 }
 
 // A game is five cities and the share code that names them, see cities.js.
@@ -104,10 +107,10 @@ const indexed = ref(false)
 // off this rather than off the city itself, since two games running back to
 // back can legitimately draw the same city and an identity check would miss it.
 const round = ref(0)
-// Bumped only when a run is swapped out. The globe keeps every round's pins for
-// the length of one, so it has to tell a new city from a new run -- `round`
-// moves for both.
-const game = ref(0)
+// Which run the globe is showing, by id. A paused game coming back has the
+// id it left with, which is how the globe knows to put its pins back rather
+// than open on a bare planet.
+const game = computed(() => run.value.id)
 
 // Whether the main pointer is a finger: a phone or a tablet. Three things
 // follow. The globe aims with a crosshair instead of a cursor, the key hints
@@ -136,6 +139,15 @@ const rounds = computed(() => cities.value.length)
 const multiplier = computed(() =>
   studying.value ? 1 : ROUND_MULTIPLIERS[run.value.index],
 )
+// Where a study city would have fallen in a game, as {round, multiplier} with
+// the round one-based, so the prompt and the final breakdown can say how hard
+// the pool rates it. Null in a game, where the round number itself says.
+function tierOf(place) {
+  const index = roundOf(place)
+  return {round: index + 1, multiplier: ROUND_MULTIPLIERS[index]}
+}
+const tier = computed(() => (studying.value && city.value ? tierOf(city.value) : null))
+const tiers = computed(() => (studying.value ? cities.value.map(tierOf) : null))
 const maxScore = computed(() =>
   studying.value ? rounds.value * ROUND_MAX : GAME_MAX,
 )
@@ -219,10 +231,9 @@ function copyLink() {
     .catch(() => {})
 }
 
-// Every run change goes through here: a new run means a globe with nothing of
-// the old one left on it, which is what the game counter buys.
+// Every run change goes through here. `round` moves too, so the globe sees
+// the swap even when both runs are on their first city.
 function swapRun(next) {
-  game.value += 1
   run.value = next
   round.value += 1
   copied.value = false
@@ -268,10 +279,9 @@ function resumeGame() {
   // globe kept everything and there is nothing to put back.
   if (!paused || paused === run.value) return
 
-  // A study run has used the globe since, so what is standing on it belongs to
-  // that run. Swapping clears it. The held game keeps its city and its score
-  // exactly; the pins it had already put down do not come back, which is the
-  // one thing the two modes sharing a globe costs.
+  // A study run has used the globe since. Swapping back takes the run's pins
+  // down and puts the held game's own back up -- the globe shelved them when
+  // the run began -- so the game resumes exactly as it was left.
   swapRun(paused)
 }
 
@@ -396,6 +406,7 @@ onBeforeUnmount(() => {
         :multiplier="multiplier"
         :rounds="rounds"
         :studying="studying"
+        :tier="tier"
       />
 
       <Tally v-if="!selecting" :max-score="maxScore" :total="total" />
@@ -420,6 +431,7 @@ onBeforeUnmount(() => {
         :percent="percent"
         :scored="run.scored"
         :studying="studying"
+        :tiers="tiers"
         :total="total"
         @copy="copyLink"
       />
