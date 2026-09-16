@@ -820,7 +820,7 @@ const TIERS = [
     {name: 'Lilongwe', region: 'Malawi', lat: -13.9626, lon: 33.7741},
     {name: 'Nukuʻalofa', region: 'Tonga', lat: -21.1333, lon: -175.2},
     {name: 'Honiara', region: 'Solomon Islands', lat: -9.4319, lon: 159.9565},
-    {name: 'Goma', region: 'Democratic Republic of the Congo', lat: -1.6741, lon: 29.2285},
+    {name: 'Goma', region: 'Democratic Republic of the Congo', lat: -1.674, lon: 29.218},
     {name: 'Maracaibo', region: 'Venezuela', lat: 10.6427, lon: -71.6125},
     {name: 'Port Vila', region: 'Vanuatu', lat: -17.7333, lon: 168.3167},
     {name: 'Kisangani', region: 'Democratic Republic of the Congo', lat: 0.5153, lon: 25.191},

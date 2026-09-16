@@ -73,11 +73,12 @@ async function fetchBorders() {
 // and null overall until loadBorders() has settled.
 //
 // Answered from the coordinates rather than from what the place says it is,
-// which resolves all 618 in the pool and gets 617 right. The exception is the
-// class of thing you would expect: Goma's coordinates sit about a kilometer
-// east of where a 1:10m map draws the DRC/Rwanda line through it, so its
-// outline is Rwanda's. Only a name-to-polygon table would fix that, and one
-// border town is not worth maintaining one.
+// which resolves every place in the pool to the country its label names. The
+// one that did not was the class of thing you would expect: Goma's source
+// coordinates sat about a kilometer east of where a 1:10m map draws the
+// DRC/Rwanda line through the city, so its outline was Rwanda's. The pool
+// now places it a kilometer further into town instead of this file carrying a
+// name-to-polygon override for one border town.
 export function outlineFor({lat, lon, region}) {
   if (!countries) return null
 
