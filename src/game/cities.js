@@ -206,7 +206,7 @@ const TIERS = [
     {name: 'San Jose', region: 'California, United States', lat: 37.3382, lon: -121.8863},
     {name: 'Perth', region: 'Western Australia, Australia', lat: -31.9523, lon: 115.8613},
   ],
-  // round 3 -- 377 places: capitals of placeable countries, lesser cities of famous ones
+  // round 3 -- 378 places: capitals of placeable countries, lesser cities of famous ones
   [
     {name: 'San Marino', region: 'San Marino', lat: 43.9424, lon: 12.4578},
     {name: 'Chongqing', region: 'Chongqing, China', lat: 29.5637, lon: 106.5504},
@@ -585,8 +585,9 @@ const TIERS = [
     {name: 'Santa Ana', region: 'El Salvador', lat: 13.9942, lon: -89.5597},
     {name: 'Punta del Este', region: 'Uruguay', lat: -34.9608, lon: -54.944},
     {name: 'Salto', region: 'Uruguay', lat: -31.3833, lon: -57.9667},
+    {name: 'Manama', region: 'Bahrain', lat: 26.2285, lon: 50.5861},
   ],
-  // round 4 -- 183 places: needs real geography, but a fair ask
+  // round 4 -- 182 places: needs real geography, but a fair ask
   [
     {name: 'Sydney', region: 'Nova Scotia, Canada', lat: 46.1364, lon: -60.1956},
     {name: 'Batman', region: 'Turkey', lat: 37.8812, lon: 41.1351},
@@ -673,7 +674,6 @@ const TIERS = [
     {name: 'Thimphu', region: 'Bhutan', lat: 27.4728, lon: 89.6393},
     {name: 'Aswan', region: 'Egypt', lat: 24.0889, lon: 32.8998},
     {name: 'Lusaka', region: 'Zambia', lat: -15.3875, lon: 28.3228},
-    {name: 'Manama', region: 'Bahrain', lat: 26.2285, lon: 50.5861},
     {name: 'Papeete', region: 'French Polynesia', note: 'overseas collectivity of France', lat: -17.5516, lon: -149.5585},
     {name: 'Managua', region: 'Nicaragua', lat: 12.1364, lon: -86.2514},
     {name: 'Queenstown', region: 'New Zealand', lat: -45.0312, lon: 168.6626},
