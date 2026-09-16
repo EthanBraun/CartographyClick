@@ -7,7 +7,7 @@
 // outline on the globe, so the cities it hands back have to be the ones inside
 // that outline. Labels could not do it anyway -- they are prose, and the pool
 // says "Aberdeen, Scotland", "Unalaska, Alaska" and three different spellings
-// of DR Congo. Going through the polygons folds all of that away for free.
+// of the Congo. Going through the polygons folds all of that away for free.
 
 import {countryAt, loadBorders} from './borders'
 import {ALL_PLACES} from './cities'

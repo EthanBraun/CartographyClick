@@ -215,14 +215,13 @@ export function countryRings(code) {
 // Natural Earth writes a handful of names out in full. That is right for a
 // data file and wrong for a line of HUD read at a glance, so the long forms
 // are shortened to what the rest of the game calls them. Everything not listed
-// is already the short name.
+// is already the short name -- or, for the two Congos and the Federated
+// States of Micronesia, is kept in full on purpose: the short forms are what
+// people confuse, and the long ones are the names the countries actually use.
 const SHORT_NAMES = new Map([
   ["People's Republic of China", 'China'],
   ['United States of America', 'United States'],
-  ['Democratic Republic of the Congo', 'DR Congo'],
-  ['Republic of the Congo', 'Congo'],
   ['Czech Republic', 'Czechia'],
-  ['Federated States of Micronesia', 'Micronesia'],
   ['United States Virgin Islands', 'US Virgin Islands'],
 ])
 
