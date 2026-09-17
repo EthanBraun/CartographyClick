@@ -54,7 +54,7 @@
 // the ask is never harder than "place Wyoming". Cities larger than Portland
 // are round 2, the rest round 3. A pool that deep would make round 3 half
 // American if places were drawn uniformly, which is why the sampler draws a
-// country first; see MAX_WEIGHT below.
+// country first; see weightOf() below.
 //
 // `region` is the source's own label where it had one, since "Aberdeen,
 // Scotland" says more than "Aberdeen, the UK"; otherwise it is the resolved
@@ -972,13 +972,21 @@ function remember(roundIndex, place) {
   }
 }
 
-// Pool share is not draw share. A country weighs at most this many of its
-// open places when a round is drawn, so the United States' 140 cities come
-// up about as often as eight would -- some 15% of round 1, 10% of round 2,
-// 5% of round 3 -- and each time it is a different one. Every country
-// with fewer places than this is weighed exactly by its count, so the draw
-// still leans toward the countries with the most to ask about.
-const MAX_WEIGHT = 8
+// Pool share is not draw share. A country weighs its open places to this
+// power when a round is drawn, so the draw still leans toward the countries
+// with the most to ask about, but less than their counts alone would have
+// it: a hundred places weigh about as much as thirty-two, ten as much as six.
+// Simulated over the pool as it stands, the United States comes up in some
+// 16% of round 1, 20% of round 2 and 11% of round 3, and in about half of
+// all games -- each time a different city. A flat cap of eight was tried
+// first and starved round 3, where the US is a third of the tier: weighed as
+// eight against a hundred-odd countries, and blocked by the one-country rule
+// whenever an earlier round had drawn it, it came up in one game in forty.
+const WEIGHT_POWER = 0.75
+
+function weightOf(places) {
+  return Math.pow(places.length, WEIGHT_POWER)
+}
 
 // One place from the pool: a country by weight, then one of its places
 // uniformly. Empty pools are the caller's problem.
@@ -990,7 +998,7 @@ function draw(pool) {
     byCountry.get(country).push(place)
   }
   const groups = [...byCountry.values()]
-  const weights = groups.map((places) => Math.min(places.length, MAX_WEIGHT))
+  const weights = groups.map(weightOf)
   let roll = Math.random() * weights.reduce((sum, w) => sum + w, 0)
   for (let i = 0; i < groups.length; i++) {
     roll -= weights[i]
