@@ -149,24 +149,28 @@ export function createMarkers(viewer, accuracy) {
     if (shelf?.id !== to) return false
     const kept = shelf.state
     shelf = null
-    pin = kept.pin
     targetPin = kept.targetPin
     link = kept.link
     history = kept.history
     settledColor = kept.settledColor
-    guess = kept.guess
     countryOutline = kept.countryOutline
     regionOutline = kept.regionOutline
+    if (kept.guess) drop(kept.guess)
     show(true)
     return true
   }
 
+  // The live pin is not shelved with the rest: it reads `guess` every frame
+  // to know where to stand, and would read null the moment the slot below
+  // is cleared -- Cesium keeps evaluating a hidden entity's position. Only
+  // its site is kept, and the resume drops a fresh pin there.
   function shelve(id) {
     if (shelf) discard(shelf.state)
     show(false)
+    if (pin) viewer.entities.remove(pin)
     shelf = {
       id,
-      state: {pin, targetPin, link, history, settledColor, guess, countryOutline, regionOutline},
+      state: {targetPin, link, history, settledColor, guess, countryOutline, regionOutline},
     }
     pin = null
     targetPin = null
@@ -180,7 +184,7 @@ export function createMarkers(viewer, accuracy) {
 
   // A shelved run that is never coming back.
   function discard(state) {
-    for (const entity of [state.pin, state.targetPin, state.link, ...state.history]) {
+    for (const entity of [state.targetPin, state.link, ...state.history]) {
       if (entity) viewer.entities.remove(entity)
     }
     for (const each of [state.countryOutline, state.regionOutline]) {
