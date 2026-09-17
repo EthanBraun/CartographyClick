@@ -352,7 +352,7 @@ onMounted(() => {
     attachTouch(viewer),
     scene.postRender.addEventListener(() => select.update(aim())),
   ]
-  readout.value.attach(viewer, () => markers.guess)
+  readout.value.attach(viewer, () => markers.guess, aim)
 
   // Start the border files downloading now rather than at the first reveal —
   // there is a whole round of aiming to cover the few MB. A failure here is

@@ -30,17 +30,22 @@ const minZoomLabel = ref('')
 // Empty until a pin is down.
 const pinDiameterLabel = ref('')
 const pinLengthLabel = ref('')
+// Where the cursor is over the ground; empty while it is off the globe.
+const cursorLabel = ref('')
 
 let viewer = null
 let getGuess = null
+let getAim = null
 let removeReadout = null
 
 // The globe builds its viewer after this has mounted, so it hands the viewer
 // over rather than passing it down. `guess` returns the pin site in radians,
-// or null while there is no pin.
-function attach(target, guess) {
+// or null while there is no pin; `aim` the screen point a drop would land
+// under, or null before the cursor has crossed the canvas.
+function attach(target, guess, aim) {
   viewer = target
   getGuess = guess
+  getAim = aim
   removeReadout = viewer.scene.postRender.addEventListener(update)
 }
 
@@ -51,6 +56,7 @@ function detach() {
   removeReadout = null
   viewer = null
   getGuess = null
+  getAim = null
 }
 
 defineExpose({attach, detach})
@@ -87,6 +93,9 @@ function update() {
   const label = formatKm(nice)
   if (label !== scaleLabel.value) scaleLabel.value = label
 
+  const cursor = formatCursor()
+  if (cursor !== cursorLabel.value) cursorLabel.value = cursor
+
   const guess = getGuess()
   if (!guess) {
     if (pinDiameterLabel.value) pinDiameterLabel.value = ''
@@ -101,6 +110,23 @@ function update() {
   if (lengthText !== pinLengthLabel.value) pinLengthLabel.value = lengthText
 }
 
+// The ground under the cursor as "38.6270°N 90.1994°W", or '' when the cursor
+// is off the canvas or over space. Four places is about 10 m, the precision
+// the pool's coordinates are given to.
+function formatCursor() {
+  const at = getAim()
+  if (!at) return ''
+  const ray = viewer.camera.getPickRay(at)
+  const ground = ray ? viewer.scene.globe.pick(ray, viewer.scene) : undefined
+  if (!Cesium.defined(ground)) return ''
+  const carto = Cesium.Cartographic.fromCartesian(ground)
+  const lat = Cesium.Math.toDegrees(carto.latitude)
+  const lon = Cesium.Math.toDegrees(carto.longitude)
+  const degrees = (value, positive, negative) =>
+    `${Math.abs(value).toFixed(4)}°${value < 0 ? negative : positive}`
+  return `${degrees(lat, 'N', 'S')} ${degrees(lon, 'E', 'W')}`
+}
+
 onBeforeUnmount(detach)
 </script>
 
@@ -113,6 +139,7 @@ onBeforeUnmount(detach)
     <div class="scale-pin">
       alt {{ altitudeLabel }} &middot; floor {{ minZoomLabel }}
     </div>
+    <div class="scale-pin">cursor {{ cursorLabel || '–' }}</div>
     <div class="scale-pin">
       pin &#8960;
       <template v-if="selecting">pick a country with {{ dropKey.toUpperCase() }}</template>
