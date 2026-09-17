@@ -86,6 +86,12 @@ let savedView = null
 let selectedGame = 0
 // Stops the finale's lift-and-spin; null while it is not running.
 let stopFinale = null
+// What a right click just put on the clipboard, shown at the click for a
+// moment: {text, x, y, id}. Null while nothing is showing. The id changes per
+// click so a second copy restarts the fade instead of joining the first.
+const copied = ref(null)
+let copiedTimer = null
+let copiedId = 0
 // Stops the climb to the next city's opening height; null while it is not
 // running. The climb leaves the globe in the player's hands, so it has to be
 // ended by hand whenever something else takes the camera.
@@ -140,24 +146,64 @@ function dropPin() {
   if (!live()) return
   // One guess per city — once the answer is showing, the round is closed.
   if (!props.target || props.revealed) return
-  const at = aim()
-  if (!at) return
+  const carto = groundUnder(aim())
+  if (!carto) return
 
-  const ray = viewer.camera.getPickRay(at)
-  if (!ray) return
-
-  // Picking the globe rather than the depth buffer means a cursor out over
-  // space returns nothing, so we simply don't place a pin there.
-  const position = viewer.scene.globe.pick(ray, viewer.scene)
-  if (!Cesium.defined(position)) return
-
-  const carto = Cesium.Cartographic.fromCartesian(position)
   markers.drop({longitude: carto.longitude, latitude: carto.latitude})
 
   emit('guess', {
     lat: Cesium.Math.toDegrees(carto.latitude),
     lon: Cesium.Math.toDegrees(carto.longitude),
   })
+}
+
+// The ground under a screen point as a Cartographic, or null when the point
+// is off the canvas or out over space. Picking the globe rather than the
+// depth buffer is what makes space come back empty.
+function groundUnder(at) {
+  if (!at) return null
+  const ray = viewer.camera.getPickRay(at)
+  if (!ray) return null
+  const position = viewer.scene.globe.pick(ray, viewer.scene)
+  if (!Cesium.defined(position)) return null
+  return Cesium.Cartographic.fromCartesian(position)
+}
+
+// A right click puts the ground under the cursor on the clipboard as
+// "38.6270, -90.1994" -- the form a map search or a question takes as is --
+// and shows the text at the click for a moment, which says both that it
+// happened and what was taken. A convenience for looking a place up, not part
+// of the game, so nothing advertises it and there is no touch equivalent.
+// Four places is about 10 m, the precision the pool's coordinates are given
+// to.
+function copyCursor(position) {
+  if (!live() || props.touch) return
+  const carto = groundUnder(position)
+  if (!carto) return
+  const lat = Cesium.Math.toDegrees(carto.latitude).toFixed(4)
+  const lon = Cesium.Math.toDegrees(carto.longitude).toFixed(4)
+  const text = `${lat}, ${lon}`
+  // No clipboard -- an http preview, a webview that denies it -- and this
+  // quietly does nothing, which is all a curiosity deserves. The note only
+  // shows once the write has gone through, so it never claims a copy that
+  // did not happen.
+  navigator.clipboard
+    ?.writeText(text)
+    .then(() => showCopied(text, position))
+    .catch(() => {})
+}
+
+const COPIED_MS = 1400
+
+function showCopied(text, at) {
+  if (!live()) return
+  copiedId += 1
+  copied.value = {text, x: at.x, y: at.y, id: copiedId}
+  clearTimeout(copiedTimer)
+  copiedTimer = setTimeout(() => {
+    copied.value = null
+    copiedTimer = null
+  }, COPIED_MS)
 }
 
 // Put the answer on the globe and frame the miss.
@@ -342,6 +388,12 @@ onMounted(() => {
   cursorHandler.setInputAction((movement) => {
     cursor = Cesium.Cartesian2.clone(movement.endPosition, cursor)
   }, Cesium.ScreenSpaceEventType.MOUSE_MOVE)
+  // Cesium only reports a click when the button came up about where it went
+  // down, so a right-drag zoom does not count. It also swallows the browser's
+  // context menu on the canvas, which is why the button is free to take.
+  cursorHandler.setInputAction((click) => {
+    copyCursor(click.position)
+  }, Cesium.ScreenSpaceEventType.RIGHT_CLICK)
 
   const onResize = () => applyMinimumZoom(viewer)
   window.addEventListener('keydown', onKeyDown)
@@ -363,6 +415,9 @@ onMounted(() => {
 onBeforeUnmount(() => {
   endLift()
   endFinale()
+  clearTimeout(copiedTimer)
+  copiedTimer = null
+  copied.value = null
   for (const off of detach) off()
   detach = []
   readout.value?.detach()
@@ -386,6 +441,15 @@ onBeforeUnmount(() => {
     <!-- TEMPORARY measuring aid -->
     <ScaleReadout ref="readout" :drop-key="DROP_KEY" :selecting="selecting" />
     <div v-if="touch && aiming" class="crosshair" aria-hidden="true"></div>
+    <div
+      v-if="copied"
+      :key="copied.id"
+      class="copied"
+      :style="{left: copied.x + 'px', top: copied.y + 'px'}"
+      aria-hidden="true"
+    >
+      {{ copied.text }}
+    </div>
   </div>
 </template>
 
@@ -425,6 +489,37 @@ onBeforeUnmount(() => {
   border-radius: 50%;
   background: #fff;
   box-shadow: 0 0 0 1.5px rgba(0, 0, 0, 0.75);
+}
+
+/* The coordinates a right click just copied, sat just above and to the right
+   of the click so the spot itself stays visible, drifting up as they fade.
+   Keyed per click, so the animation starts over for each. */
+.copied {
+  position: absolute;
+  z-index: 1;
+  padding: 3px 7px;
+  margin: -30px 0 0 10px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.7);
+  color: #eee;
+  font: 12px/1.4 ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  white-space: nowrap;
+  pointer-events: none;
+  animation: copied-fade 1.4s ease-out forwards;
+}
+
+@keyframes copied-fade {
+  0% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  60% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
 }
 
 /* CesiumJS is Apache-2.0, so its logo is optional and we drop it. The text
