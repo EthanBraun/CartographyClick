@@ -43,7 +43,7 @@ const CONTINENTS = {
     'Nepal', 'North Korea', 'Oman', 'Pakistan', 'Palestine', 'Philippines',
     'Qatar', 'Saudi Arabia', 'Scarborough Shoal', 'Siachen Glacier',
     'Singapore', 'South Korea', 'Sri Lanka', 'Syria', 'Taiwan', 'Tajikistan',
-    'Thailand', 'Turkey', 'Turkmenistan', 'UAE', 'United Arab Emirates',
+    'Thailand', 'Turkey', 'Turkmenistan', 'United Arab Emirates',
     'Uzbekistan', 'Vietnam', 'Yemen',
   ],
   Europe: [
