@@ -22,14 +22,14 @@ defineProps({
 <style scoped>
 .aim {
   color: #cdd;
-  font-size: 14px;
+  font-size: calc(14px * var(--text-scale));
 }
 
 /* The one hint that has to be visible without being asked for: a mode on a key
    nobody presses by accident is a mode nobody finds. */
 .aside {
   margin-top: 5px;
-  font-size: 12px;
+  font-size: calc(12px * var(--text-scale));
   color: #8a9;
 }
 </style>

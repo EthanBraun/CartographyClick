@@ -44,7 +44,7 @@ defineProps({
   display: flex;
   justify-content: space-between;
   gap: 22px;
-  font-size: 15px;
+  font-size: calc(15px * var(--text-scale));
   line-height: 1.7;
 }
 

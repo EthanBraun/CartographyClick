@@ -38,7 +38,7 @@ kbd {
 }
 
 .meta {
-  font-size: 12px;
+  font-size: calc(12px * var(--text-scale));
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: #9aa;
@@ -76,7 +76,7 @@ kbd {
 
 .hint {
   margin-top: 8px;
-  font-size: 12px;
+  font-size: calc(12px * var(--text-scale));
   color: #8a9;
 }
 
@@ -114,8 +114,8 @@ kbd {
 
   /* Room on the right of the first line for the running total, which Tally
      positions over the strip's corner. The two agree on this by number:
-     see .tally in Tally.vue. */
+     see .tally in Tally.vue. It grows with the total's text. */
   .meta {
-    padding-right: 96px;
+    padding-right: calc(96px * var(--text-scale));
   }
 }

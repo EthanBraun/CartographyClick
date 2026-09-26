@@ -60,7 +60,7 @@ defineProps({
 
 .hovered {
   margin: 3px 0 1px;
-  font-size: 22px;
+  font-size: calc(22px * var(--text-scale));
   font-weight: 600;
 }
 
@@ -68,7 +68,7 @@ defineProps({
    name rather than as a footnote under it. */
 .hovered-count {
   margin-left: 8px;
-  font-size: 13px;
+  font-size: calc(13px * var(--text-scale));
   font-weight: 400;
   color: #e8c46a;
 }
@@ -96,19 +96,19 @@ defineProps({
   padding: 2px 9px;
   border: 1px solid rgba(232, 196, 106, 0.45);
   border-radius: 999px;
-  font-size: 13px;
+  font-size: calc(13px * var(--text-scale));
   color: #f0dca8;
 }
 
 .chip-count {
-  font-size: 11px;
+  font-size: calc(11px * var(--text-scale));
   font-variant-numeric: tabular-nums;
   color: #9aa;
 }
 
 .chips-empty {
   margin: 8px 0 2px;
-  font-size: 13px;
+  font-size: calc(13px * var(--text-scale));
   font-style: italic;
   color: #7b8a8a;
 }
@@ -122,7 +122,7 @@ defineProps({
   }
 
   .hovered {
-    font-size: 19px;
+    font-size: calc(19px * var(--text-scale));
   }
 
   .chips {

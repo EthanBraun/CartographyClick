@@ -10,6 +10,7 @@ import PickerPanel from './components/hud/PickerPanel.vue'
 import RoundPrompt from './components/hud/RoundPrompt.vue'
 import RoundResult from './components/hud/RoundResult.vue'
 import Tally from './components/hud/Tally.vue'
+import TextSize from './components/hud/TextSize.vue'
 import TouchBar from './components/hud/TouchBar.vue'
 import './components/hud/hud.css'
 import {sharedGround} from './game/borders'
@@ -126,6 +127,38 @@ const onPointerChange = (event) => {
 // The globe, for the one thing a button has to reach into it for: the commit
 // that F makes.
 const globe = ref(null)
+
+// How big the HUD's text is drawn, as a multiple of the size it was designed
+// at. Offered on touch only, and applied on touch only, so a desktop never
+// sees a size picked on the same browser with a finger. Every font size in
+// the HUD is written against --text-scale for this.
+const TEXT_SCALES = [1, 1.12, 1.25, 1.4]
+const TEXT_SCALE_KEY = 'cartographyclick.textScale'
+
+// localStorage rather than a cookie: a cookie is for telling a server
+// something, and it would ride along on every request the page makes to its
+// host. There is no server here that wants to know.
+function loadTextScale() {
+  try {
+    const saved = Number(localStorage.getItem(TEXT_SCALE_KEY))
+    if (TEXT_SCALES.includes(saved)) return saved
+  } catch {
+    // Private mode or a webview that denies storage: the default size.
+  }
+  return TEXT_SCALES[0]
+}
+
+const textScale = ref(loadTextScale())
+const textSizeOpen = ref(false)
+
+function pickTextScale(scale) {
+  textScale.value = scale
+  try {
+    localStorage.setItem(TEXT_SCALE_KEY, String(scale))
+  } catch {
+    // Kept for this visit only.
+  }
+}
 
 const cities = computed(() => run.value.cities)
 const city = computed(() => cities.value[run.value.index] ?? null)
@@ -372,7 +405,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="app">
+  <div class="app" :style="{'--text-scale': touch ? textScale : 1}">
     <Globe
       ref="globe"
       :accuracy="accuracy"
@@ -447,6 +480,14 @@ onBeforeUnmount(() => {
         @advance="advance"
         @commit="globe?.commit()"
         @restart="restart"
+      />
+      <TextSize
+        v-if="touch"
+        :open="textSizeOpen"
+        :scale="textScale"
+        :scales="TEXT_SCALES"
+        @pick="pickTextScale"
+        @toggle="textSizeOpen = !textSizeOpen"
       />
     </div>
   </div>

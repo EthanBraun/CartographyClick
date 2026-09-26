@@ -22,14 +22,14 @@ defineProps({
 }
 
 .tally-score {
-  font-size: 28px;
+  font-size: calc(28px * var(--text-scale));
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
 
 .tally-max {
   margin-left: 3px;
-  font-size: 14px;
+  font-size: calc(14px * var(--text-scale));
   color: #9aa;
 }
 
@@ -45,11 +45,11 @@ defineProps({
   }
 
   .tally-score {
-    font-size: 17px;
+    font-size: calc(17px * var(--text-scale));
   }
 
   .tally-max {
-    font-size: 12px;
+    font-size: calc(12px * var(--text-scale));
   }
 }
 </style>

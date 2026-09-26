@@ -56,13 +56,13 @@ defineProps({
 
 .city {
   margin: 2px 0 0;
-  font-size: 34px;
+  font-size: calc(34px * var(--text-scale));
   font-weight: 600;
   letter-spacing: 0.01em;
 }
 
 .country {
-  font-size: 14px;
+  font-size: calc(14px * var(--text-scale));
   color: #9aa;
 }
 
@@ -70,7 +70,7 @@ defineProps({
    label above it, because it explains the answer rather than being it. */
 .note {
   margin-top: 1px;
-  font-size: 11px;
+  font-size: calc(11px * var(--text-scale));
   font-style: italic;
   color: #7b8a8a;
 }
@@ -79,12 +79,12 @@ defineProps({
    a phone. This size puts the longest on two lines and most on one. */
 @media (max-width: 640px) {
   .city {
-    font-size: 24px;
+    font-size: calc(24px * var(--text-scale));
     line-height: 1.2;
   }
 
   .country {
-    font-size: 13px;
+    font-size: calc(13px * var(--text-scale));
   }
 }
 </style>

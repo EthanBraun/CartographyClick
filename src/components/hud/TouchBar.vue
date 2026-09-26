@@ -53,7 +53,7 @@ defineEmits(['commit', 'advance', 'restart'])
   background: rgba(0, 0, 0, 0.6);
   color: #fff;
   font: inherit;
-  font-size: 15px;
+  font-size: calc(15px * var(--text-scale));
   font-weight: 600;
   pointer-events: auto;
   touch-action: manipulation;

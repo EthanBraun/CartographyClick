@@ -103,11 +103,11 @@ defineEmits(['copy'])
   margin-top: 6px;
   padding-top: 8px;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
-  font-size: 13px;
+  font-size: calc(13px * var(--text-scale));
 }
 
 .share-label {
-  font-size: 11px;
+  font-size: calc(11px * var(--text-scale));
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: #9aa;
@@ -117,7 +117,7 @@ defineEmits(['copy'])
    off a screen, and selectable on its own for the desktop way of copying. */
 .code {
   font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
-  font-size: 15px;
+  font-size: calc(15px * var(--text-scale));
   font-weight: 600;
   letter-spacing: 0.12em;
   pointer-events: auto;
@@ -130,7 +130,7 @@ defineEmits(['copy'])
   background: none;
   color: #8a9;
   font: inherit;
-  font-size: 12px;
+  font-size: calc(12px * var(--text-scale));
   text-decoration: underline;
   text-underline-offset: 2px;
   cursor: pointer;
@@ -144,21 +144,21 @@ defineEmits(['copy'])
 }
 
 .final-label {
-  font-size: 12px;
+  font-size: calc(12px * var(--text-scale));
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: #9aa;
 }
 
 .final-score {
-  font-size: 46px;
+  font-size: calc(46px * var(--text-scale));
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
 
 .final-max {
   margin-left: 4px;
-  font-size: 16px;
+  font-size: calc(16px * var(--text-scale));
   font-weight: 400;
   color: #9aa;
 }
@@ -168,7 +168,7 @@ defineEmits(['copy'])
    the answer. */
 .final-raw {
   margin-top: 2px;
-  font-size: 13px;
+  font-size: calc(13px * var(--text-scale));
   color: #9aa;
   font-variant-numeric: tabular-nums;
 }
@@ -177,12 +177,12 @@ defineEmits(['copy'])
   margin: 14px 0 4px;
   padding: 0;
   list-style: none;
-  font-size: 14px;
+  font-size: calc(14px * var(--text-scale));
 }
 
 .breakdown li {
   display: grid;
-  grid-template-columns: 1fr auto auto 52px;
+  grid-template-columns: 1fr auto auto calc(52px * var(--text-scale));
   align-items: center;
   gap: 14px;
   padding: 3px 0;
@@ -199,7 +199,7 @@ defineEmits(['copy'])
    country -- "Simpson Bay, Sint Maarten" -- never share one. */
 .breakdown-region {
   display: block;
-  font-size: 12px;
+  font-size: calc(12px * var(--text-scale));
   color: #9aa;
 }
 
@@ -217,7 +217,7 @@ defineEmits(['copy'])
 }
 
 .breakdown-working .tier {
-  font-size: 12px;
+  font-size: calc(12px * var(--text-scale));
 }
 
 .mult {
@@ -232,7 +232,8 @@ defineEmits(['copy'])
 /* On a phone the card sits well in from the edges, so it reads as a card over
    the globe and not as a sheet laid across it, and is capped so a wider
    phone gets the same card with more globe round it. Its height is what is
-   left between the prompt strip above and the buttons below. Even a game's
+   left between the prompt strip above and the buttons below, and the strip
+   gets taller with the text size, so the card gets shorter with it. Even a game's
    five rows can run past that in landscape, so every card scrolls here, not
    just a study run's, which is why it takes the pointer on a phone
    regardless. Both selectors, or the study run's own cap above would outrank
@@ -242,8 +243,8 @@ defineEmits(['copy'])
   .final.long {
     width: min(calc(100vw - 64px), 340px);
     min-width: 0;
-    max-height: calc(100vh - 200px);
-    max-height: calc(100dvh - 200px);
+    max-height: calc(100vh - 200px * var(--text-scale));
+    max-height: calc(100dvh - 200px * var(--text-scale));
     padding: 16px 14px;
     overflow-y: auto;
     pointer-events: auto;
@@ -251,15 +252,15 @@ defineEmits(['copy'])
   }
 
   .final-score {
-    font-size: 40px;
+    font-size: calc(40px * var(--text-scale));
   }
 
   .breakdown {
-    font-size: 13px;
+    font-size: calc(13px * var(--text-scale));
   }
 
   .breakdown li {
-    grid-template-columns: 1fr auto auto 44px;
+    grid-template-columns: 1fr auto auto calc(44px * var(--text-scale));
     gap: 8px;
   }
 }

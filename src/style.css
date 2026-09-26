@@ -2,6 +2,13 @@ html {
     background-color: #1e1e1e;
 }
 
+/* How much bigger than designed the HUD's text is drawn. App.vue sets it
+   from the text size picked on a touchscreen; this is the size it was
+   designed at, for everywhere else. */
+:root {
+    --text-scale: 1;
+}
+
 body {
     margin: 0;
     color: white;
