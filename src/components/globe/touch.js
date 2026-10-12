@@ -7,32 +7,52 @@
 // lifts, because the flick it leaves behind is still being replayed for a
 // second or so and would stop dead the moment the mouse's settings came back.
 //
-// Three things change while a finger is the input, and change back after.
+// While a finger is the input Cesium's own touch handling is switched off
+// and both gestures are taken over here; it all goes back when the mouse
+// moves.
 //
-// The zoom cap. The per-notch easing on the wheel is applied by Cesium to
-// every input, per frame, and held a pinch to a crawl; see updateZoomStep.
+// The pinch. A player aims by dragging the globe under a crosshair in the
+// middle of the screen, so the ground under the middle is the thing they
+// are holding. Cesium zooms toward the midpoint between the fingers, which
+// is wherever a thumb and a finger could grip the glass and never where the
+// crosshair is, so every pinch pulled that ground out from under it. On a
+// desktop the wheel zooms toward the mouse, and the mouse is the aim, so a
+// mouse never meets this. This pinch zooms toward the ground under the
+// crosshair instead, along the camera's line of sight to it, so a pinch can
+// change the scale of what is aimed at and nothing else. The scale tracks
+// the fingers: spread them to twice the distance and the ground is twice
+// the size. Cesium's throttled the pinch to a crawl, too, by holding it to
+// the per-frame cap updateZoomStep sets for the wheel.
 //
-// The zoom rate. Fingers can only spread so far, and Cesium's rate has a
-// full pinch clearing a fraction of the range a few wheel turns would.
+// The one-finger drag. Cesium's keeps the ground under the finger, and that
+// is right up close and wrong from far out. At whole-globe height a phone
+// shows the planet three hundred pixels across, so keeping a point under
+// the finger turns it a quarter of the way round in half a screen -- and
+// faster still toward the limb, where a pixel of finger is a long way round
+// the sphere. A mouse never meets this, because a desktop draws the globe
+// three times as many pixels wide. This drag turns the globe by the ground
+// angle one pixel covers at the middle of the screen, wherever the finger
+// is, and never faster than a third of a turn per screen width: one to one
+// when close, a heavy globe from far out, which is the feel Cesium's own
+// trackball gives a mouse at the same heights. A flick coasts and dies away
+// the way Cesium's does.
 //
-// The one-finger drag, which is taken over outright. Cesium's keeps the
-// ground under the finger, and that is right up close and wrong from far out.
-// At whole-globe height a phone shows the planet three hundred pixels across,
-// so keeping a point under the finger turns it a quarter of the way round in
-// half a screen -- and faster still toward the limb, where a pixel of finger
-// is a long way round the sphere. A mouse never meets this, because a desktop
-// draws the globe three times as many pixels wide. This drag turns the globe
-// by the ground angle one pixel covers at the middle of the screen, wherever
-// the finger is, and never faster than a third of a turn per screen width:
-// one to one when close, a heavy globe from far out, which is the feel
-// Cesium's own trackball gives a mouse at the same heights. A flick coasts
-// and dies away the way Cesium's does.
+// A drag begins only once the finger has moved a few pixels. Fingers land
+// and lift untidily: the first of a pinch's two is a drag for the moment
+// before the second arrives, and the last to leave is a drag again from the
+// moment the other lifts, and each turned the globe by the little it moved
+// in that time, so almost every pinch ended with the aim nudged off. Under
+// the slop a finger is settling, not dragging.
 
 import * as Cesium from 'cesium'
 import {lookAtCartographic, metersPerPixel, updateZoomStep} from './camera'
 
-// Cesium's is 5.
-const TOUCH_ZOOM_FACTOR = 8
+// How far a finger moves before it is dragging, in pixels.
+const DRAG_SLOP_PX = 6
+// Exponent on the finger spread. 1 is the ground tracking the fingers; more
+// is a quicker zoom for the same pinch, at the cost of the ground sliding
+// past the fingers.
+const PINCH_GAIN = 1
 const MAX_TURN_PER_WIDTH = Cesium.Math.TWO_PI / 3
 // A degree of longitude is shorter toward the poles, so a sideways drag
 // covers more of them to move the ground the same distance -- up to a floor,
@@ -54,15 +74,17 @@ export function attachTouch(viewer) {
   const {scene, camera} = viewer
   const {canvas} = scene
   const controller = scene.screenSpaceCameraController
-  const mouseZoomFactor = controller.zoomFactor
   let touching = false
   // Fingers on the canvas by pointer id, each with where it was last seen.
   const fingers = new Map()
-  // The finger doing the dragging: where it was last, when, and how fast it
-  // was going, smoothed, so the flick is the drag's last stretch rather than
-  // its last jitter. Null while no finger is dragging, including through a
-  // pinch, which is Cesium's.
+  // The finger doing the dragging: where it landed, where it was last, when,
+  // and how fast it was going, smoothed, so the flick is the drag's last
+  // stretch rather than its last jitter. Not armed until it has moved past
+  // the slop. Null while no finger is dragging, including through a pinch.
   let drag = null
+  // The two fingers of a pinch: how far apart they were last. Null while
+  // there are not exactly two fingers down.
+  let pinch = null
   // A lifted finger's flick, in px/s, while it coasts.
   let coast = null
   let coastedAt = 0
@@ -71,11 +93,18 @@ export function attachTouch(viewer) {
     if (touching === on) return
     touching = on
     controller.enableRotate = !on
-    controller.zoomFactor = on ? TOUCH_ZOOM_FACTOR : mouseZoomFactor
+    controller.enableZoom = !on
   }
 
   function startDrag(id, x, y) {
-    drag = {id, x, y, at: performance.now(), vx: 0, vy: 0}
+    drag = {id, x, y, at: performance.now(), vx: 0, vy: 0, armed: false, ox: x, oy: y}
+  }
+
+  // How far apart the two fingers are. Never zero, so the ratio of two
+  // spreads is always a number.
+  function spread() {
+    const [a, b] = fingers.values()
+    return Math.max(Math.hypot(a.x - b.x, a.y - b.y), 1)
   }
 
   function onPointerDown(event) {
@@ -87,9 +116,11 @@ export function attachTouch(viewer) {
     setTouching(true)
     fingers.set(event.pointerId, {x: event.clientX, y: event.clientY})
     // One finger drags. A second makes it a pinch, and the drag ends there
-    // rather than fighting the zoom over the same frames.
+    // rather than fighting the zoom over the same frames. A third ends the
+    // pinch too; two of three is not a gesture anyone means.
     if (fingers.size === 1) startDrag(event.pointerId, event.clientX, event.clientY)
     else drag = null
+    pinch = fingers.size === 2 ? {spread: spread()} : null
   }
 
   function onPointerMove(event) {
@@ -97,9 +128,25 @@ export function attachTouch(viewer) {
     if (!finger) return
     finger.x = event.clientX
     finger.y = event.clientY
+    if (pinch) {
+      const now = spread()
+      zoomBy(pinch.spread / now)
+      pinch.spread = now
+      return
+    }
     if (!drag || drag.id !== event.pointerId) return
 
     const now = performance.now()
+    if (!drag.armed) {
+      if (Math.hypot(event.clientX - drag.ox, event.clientY - drag.oy) < DRAG_SLOP_PX) return
+      // The slop is dropped rather than replayed, so the drag starts where
+      // the finger is instead of with a jump.
+      drag.armed = true
+      drag.x = event.clientX
+      drag.y = event.clientY
+      drag.at = now
+      return
+    }
     const dx = event.clientX - drag.x
     const dy = event.clientY - drag.y
     const seconds = Math.max(now - drag.at, 1) / 1000
@@ -114,14 +161,16 @@ export function attachTouch(viewer) {
   function onPointerUp(event) {
     if (!fingers.delete(event.pointerId)) return
     if (drag?.id === event.pointerId) {
-      if (performance.now() - drag.at < FLICK_WINDOW_MS) {
+      if (drag.armed && performance.now() - drag.at < FLICK_WINDOW_MS) {
         coast = {vx: drag.vx, vy: drag.vy}
         coastedAt = performance.now()
       }
       drag = null
     }
     // A pinch that ends with one finger still down carries on as a drag from
-    // wherever that finger is.
+    // wherever that finger is, once it has moved past the slop. Three fingers
+    // down to two is a pinch again, from however far apart those two are.
+    pinch = fingers.size === 2 ? {spread: spread()} : null
     if (!drag && fingers.size === 1) {
       const [[id, finger]] = fingers
       startDrag(id, finger.x, finger.y)
@@ -165,6 +214,44 @@ export function attachTouch(viewer) {
     })
   }
 
+  // Scale the camera's distance to the ground under the crosshair by `ratio`:
+  // less than one is closer. The camera moves along its own line of sight to
+  // that ground, so the ground stays exactly under the crosshair whatever the
+  // tilt -- after a reveal the camera is leaning, and the aim is well ahead
+  // of where it stands. Held to the same floor and ceiling as the wheel.
+  function zoomBy(ratio) {
+    if (viewer.isDestroyed() || !controller.enableInputs) return
+    const scale = ratio ** PINCH_GAIN
+    const floor = controller.minimumZoomDistance
+    const ceiling = controller.maximumZoomDistance
+    const aim = lookAtCartographic(viewer)
+    let destination
+    if (aim) {
+      const ground = Cesium.Cartesian3.fromRadians(aim.longitude, aim.latitude)
+      const distance = Cesium.Cartesian3.distance(camera.positionWC, ground)
+      const wanted = Cesium.Math.clamp(distance * scale, floor, ceiling)
+      destination = Cesium.Cartesian3.lerp(
+        ground,
+        camera.positionWC,
+        wanted / distance,
+        new Cesium.Cartesian3(),
+      )
+    } else {
+      // Aimed past the limb into space, there is no ground to hold; scale
+      // the height over wherever the camera stands instead.
+      const here = camera.positionCartographic
+      destination = Cesium.Cartesian3.fromRadians(
+        here.longitude,
+        here.latitude,
+        Cesium.Math.clamp(here.height * scale, floor, ceiling),
+      )
+    }
+    camera.setView({
+      destination,
+      orientation: {heading: camera.heading, pitch: camera.pitch, roll: 0},
+    })
+  }
+
   function tick() {
     if (!coast) return
     if (!controller.enableInputs) {
@@ -190,9 +277,7 @@ export function attachTouch(viewer) {
   window.addEventListener('pointerup', onPointerUp, {passive: true})
   window.addEventListener('pointercancel', onPointerUp, {passive: true})
   const removeTick = scene.preUpdate.addEventListener(tick)
-  const removeZoomStep = scene.postRender.addEventListener(() =>
-    updateZoomStep(viewer, touching),
-  )
+  const removeZoomStep = scene.postRender.addEventListener(() => updateZoomStep(viewer))
 
   return () => {
     removeTick()

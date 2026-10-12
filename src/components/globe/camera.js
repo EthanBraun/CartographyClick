@@ -89,15 +89,6 @@ const ZOOM_STEP_NEAR = 0.07           // fraction of remaining altitude, close i
 const ZOOM_STEP_FAR = 0.02            // ... at full zoom-out
 const ZOOM_DAMP_FROM = 3_000_000      // meters; below this, no extra easing
 
-// The cap is a wheel thing, but Cesium applies the one ratio to every input,
-// per frame: a pinch, and one direction of a one-finger drag, are held to the
-// same few thousandths of the screen a notch is. On a phone that is a zoom
-// that crawls and a globe that turns one way slower than the other. A pinch
-// needs no easing -- it is continuous, and the fingers set the pace -- so
-// while the fingers are the input the cap goes back to Cesium's own default,
-// which they never reach.
-const TOUCH_MOVEMENT_RATIO = 0.1      // Cesium's default
-
 // Closest zoom is defined as "the scale bar's width covers 8 km". Solved at runtime
 // from the live canvas size and vertical FOV rather than baked in, since both
 // shift with the window.
@@ -125,16 +116,13 @@ function zoomDistanceForScale(viewer, km) {
 }
 
 // Ease the per-notch zoom step as altitude climbs, interpolated in log space
-// so it tracks how zoom actually feels rather than raw meters. `touching` is
-// whether a finger rather than a wheel is the input right now -- touch.js
-// keeps track and calls this every frame.
-export function updateZoomStep(viewer, touching) {
+// so it tracks how zoom actually feels rather than raw meters. Cesium applies
+// the one ratio to every input it handles, per frame, which is why touch.js
+// handles the fingers itself rather than letting a pinch be held to the few
+// thousandths of the screen a notch is.
+export function updateZoomStep(viewer) {
   if (!viewer || viewer.isDestroyed()) return
   const controller = viewer.scene.screenSpaceCameraController
-  if (touching) {
-    controller.maximumMovementRatio = TOUCH_MOVEMENT_RATIO
-    return
-  }
   const height = Math.max(viewer.camera.positionCartographic.height, ZOOM_DAMP_FROM)
   const span = Math.log(controller.maximumZoomDistance) - Math.log(ZOOM_DAMP_FROM)
   const t =
