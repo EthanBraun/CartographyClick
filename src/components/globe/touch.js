@@ -216,38 +216,49 @@ export function attachTouch(viewer) {
 
   // Scale the camera's distance to the ground under the crosshair by `ratio`:
   // less than one is closer. The camera moves along its own line of sight to
-  // that ground, so the ground stays exactly under the crosshair whatever the
-  // tilt -- after a reveal the camera is leaning, and the aim is well ahead
-  // of where it stands. Held to the same floor and ceiling as the wheel.
+  // that ground and keeps looking along it, so the ray through the crosshair
+  // is the same ray before and after and what it hits cannot change, whatever
+  // the tilt -- after a reveal the camera is leaning, and the aim is well
+  // ahead of where it stands. The orientation is carried as the direction
+  // and up vectors themselves, not as heading and pitch: those are measured
+  // against up at wherever the camera stands, and a move along a slanted
+  // line of sight changes that, so the same pitch at the new spot would
+  // swing the view off the ground it was holding. Held to the same floor
+  // and ceiling as the wheel.
   function zoomBy(ratio) {
     if (viewer.isDestroyed() || !controller.enableInputs) return
     const scale = ratio ** PINCH_GAIN
     const floor = controller.minimumZoomDistance
     const ceiling = controller.maximumZoomDistance
     const aim = lookAtCartographic(viewer)
-    let destination
     if (aim) {
       const ground = Cesium.Cartesian3.fromRadians(aim.longitude, aim.latitude)
       const distance = Cesium.Cartesian3.distance(camera.positionWC, ground)
       const wanted = Cesium.Math.clamp(distance * scale, floor, ceiling)
-      destination = Cesium.Cartesian3.lerp(
-        ground,
-        camera.positionWC,
-        wanted / distance,
-        new Cesium.Cartesian3(),
-      )
-    } else {
-      // Aimed past the limb into space, there is no ground to hold; scale
-      // the height over wherever the camera stands instead.
-      const here = camera.positionCartographic
-      destination = Cesium.Cartesian3.fromRadians(
+      camera.setView({
+        destination: Cesium.Cartesian3.lerp(
+          ground,
+          camera.positionWC,
+          wanted / distance,
+          new Cesium.Cartesian3(),
+        ),
+        orientation: {
+          direction: Cesium.Cartesian3.clone(camera.directionWC),
+          up: Cesium.Cartesian3.clone(camera.upWC),
+        },
+      })
+      return
+    }
+    // Aimed past the limb into space, there is no ground to hold; scale the
+    // height over wherever the camera stands instead, looking the same way
+    // relative to the ground below.
+    const here = camera.positionCartographic
+    camera.setView({
+      destination: Cesium.Cartesian3.fromRadians(
         here.longitude,
         here.latitude,
         Cesium.Math.clamp(here.height * scale, floor, ceiling),
-      )
-    }
-    camera.setView({
-      destination,
+      ),
       orientation: {heading: camera.heading, pitch: camera.pitch, roll: 0},
     })
   }
